@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1A1621">
+    <meta name="color-scheme" content="dark">
+    <title>لوحة التحكم — عودة للعقار</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<header class="app-header">
+    <div class="header-inner">
+        <div class="logo-container">
+            <div class="logo-mark"><i class="fas fa-home"></i></div>
+            <div class="logo-text">
+                <span class="admin-title">عودة للعقار</span>
+                <span class="admin-subtitle">لوحة التحكم</span>
+            </div>
+        </div>
+        <div class="user-actions">
+            <button class="icon-btn" id="refresh-btn" title="تحديث"><i class="fas fa-rotate"></i></button>
+            <button class="icon-btn logout-btn" id="logout-btn" title="خروج"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+    </div>
+</header>
+
+<main class="app-main">
+
+    <section id="section-dashboard" class="app-section active" data-section="dashboard">
+        <div class="section-sticky-header">
+            <div>
+                <span class="eyebrow">نظرة عامة</span>
+                <h1 class="section-title">الرئيسية</h1>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon" style="background:linear-gradient(135deg,#60A5FA,#3B82F6)"><i class="fas fa-building"></i></div>
+                <div class="stat-info"><div class="stat-value" id="stat-properties">0</div><div class="stat-label">إجمالي العقارات</div></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:linear-gradient(135deg,#5EEAD4,#14B8A6)"><i class="fas fa-circle-check"></i></div>
+                <div class="stat-info"><div class="stat-value" id="stat-available">0</div><div class="stat-label">متاحة</div></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:linear-gradient(135deg,#F87171,#DC2626)"><i class="fas fa-check-double"></i></div>
+                <div class="stat-info"><div class="stat-value" id="stat-sold">0</div><div class="stat-label">تم البيع</div></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:linear-gradient(135deg,#C4B5FD,#8B5CF6)"><i class="fas fa-key"></i></div>
+                <div class="stat-info"><div class="stat-value" id="stat-rented">0</div><div class="stat-label">تم التأجير</div></div>
+            </div>
+        </div>
+
+        <div class="quick-actions">
+            <h2 class="subsection-title">إجراءات سريعة</h2>
+            <div class="quick-actions-grid">
+                <button class="quick-action-btn" data-action="add-property">
+                    <div class="qa-icon" style="background:linear-gradient(135deg,#60A5FA,#3B82F6)"><i class="fas fa-plus"></i></div>
+                    <span>عقار جديد</span>
+                </button>
+                <button class="quick-action-btn" data-action="view-properties">
+                    <div class="qa-icon" style="background:linear-gradient(135deg,#C4B5FD,#8B5CF6)"><i class="fas fa-list"></i></div>
+                    <span>كل العقارات</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section id="section-properties" class="app-section" data-section="properties">
+        <div class="section-sticky-header">
+            <div>
+                <span class="eyebrow">إدارة</span>
+                <h1 class="section-title">العقارات</h1>
+            </div>
+            <button class="btn btn-primary" id="add-property-btn">
+                <i class="fas fa-plus"></i><span>عقار جديد</span>
+            </button>
+        </div>
+
+        <!-- ⭐ شريط التصنيفات -->
+        <div class="category-filter-bar">
+            <div class="category-chips" id="category-chips"></div>
+            <button class="btn-add-category" id="add-category-btn" title="إضافة تصنيف">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+
+        <div class="filters-bar">
+            <div class="search-container">
+                <div class="search-bar">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" class="search-input" id="properties-search" placeholder="ابحث في العقارات...">
+                </div>
+            </div>
+        </div>
+
+        <div class="properties-grid" id="properties-grid"></div>
+    </section>
+
+    <section id="section-settings" class="app-section" data-section="settings">
+        <div class="section-sticky-header">
+            <div>
+                <span class="eyebrow">النظام</span>
+                <h1 class="section-title">الإعدادات</h1>
+            </div>
+        </div>
+        <div class="settings-container">
+            <div class="settings-card">
+                <h3><i class="fas fa-user-shield"></i> معلومات الحساب</h3>
+                <div class="settings-info">
+                    <div class="setting-row"><span class="k">البريد</span><span class="v" id="account-email">—</span></div>
+                    <div class="setting-row"><span class="k">الصلاحية</span><span class="v" id="account-role">—</span></div>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-circle-info"></i> عن التطبيق</h3>
+                <div class="settings-info">
+                    <div class="setting-row"><span class="k">الإصدار</span><span class="v">8.0.0</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+
+<nav class="bottom-nav" id="bottom-nav" role="tablist">
+    <button class="nav-item active" data-section="dashboard"><i class="fas fa-house"></i><span>الرئيسية</span></button>
+    <button class="nav-item" data-section="properties"><i class="fas fa-building"></i><span>العقارات</span></button>
+    <button class="nav-item" data-section="settings"><i class="fas fa-gear"></i><span>الإعدادات</span></button>
+</nav>
+
+<!-- ============ PROPERTY MODAL ============ -->
+<div class="modal" id="property-modal">
+    <div class="modal-content large">
+        <div class="modal-header">
+            <h3 id="property-modal-title">إضافة عقار جديد</h3>
+            <button class="close-modal" id="close-property-modal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="property-form" onsubmit="return false;">
+                <input type="hidden" id="property-id">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="property-title">اسم العقار *</label>
+                        <input type="text" id="property-title" placeholder="أدخل اسم العقار" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="property-code">رمز العقار *</label>
+                        <input type="text" id="property-code" placeholder="مثل: J107" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="property-type">التصنيف *</label>
+                        <select id="property-type" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="property-category">نوع العملية *</label>
+                        <select id="property-category" required>
+                            <option value="">اختر</option>
+                            <option value="للبيع">للبيع</option>
+                            <option value="للإيجار">للإيجار</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="property-status">حالة العقار *</label>
+                    <select id="property-status" required>
+                        <option value="available">متاح</option>
+                        <option value="sold">تم البيع</option>
+                        <option value="rented">تم التأجير</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="property-price">السعر *</label>
+                        <input type="text" id="property-price" placeholder="أدخل السعر" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="property-area">المساحة (م²) *</label>
+                        <input type="number" id="property-area" placeholder="أدخل المساحة" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="property-location">الموقع *</label>
+                    <input type="text" id="property-location" placeholder="أدخل العنوان" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="property-description">الوصف</label>
+                    <textarea id="property-description" placeholder="وصف العقار" rows="3"></textarea>
+                </div>
+
+                <!-- الصور -->
+                <div class="form-group">
+                    <label><i class="fas fa-images"></i> صور العقار <small id="images-count-badge">(0)</small></label>
+                    <div class="media-grid" id="images-grid"></div>
+                    <div class="media-add-row">
+                        <input type="url" id="new-image-url" placeholder="الصق رابط صورة (https://...)" dir="ltr">
+                        <button type="button" class="btn btn-primary" id="add-image-url-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div class="media-upload-row">
+                        <label class="btn btn-outline media-upload-btn" for="image-file-input">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span id="image-upload-label">رفع صور من الجهاز</span>
+                        </label>
+                        <input type="file" id="image-file-input" accept="image/*" multiple style="display:none">
+                    </div>
+                </div>
+
+                <!-- الفيديوهات -->
+                <div class="form-group">
+                    <label><i class="fas fa-video"></i> فيديوهات العقار <small id="videos-count-badge">(0)</small></label>
+                    <div class="media-grid" id="videos-grid"></div>
+                    <div class="media-add-row">
+                        <input type="url" id="new-video-url" placeholder="YouTube أو MP4" dir="ltr">
+                        <button type="button" class="btn btn-primary" id="add-video-url-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div class="media-upload-row">
+                        <label class="btn btn-outline media-upload-btn" for="video-file-input">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span id="video-upload-label">رفع فيديو من الجهاز</span>
+                        </label>
+                        <input type="file" id="video-file-input" accept="video/*" multiple style="display:none">
+                    </div>
+                </div>
+
+                <!-- المرافق -->
+                <div class="form-group">
+                    <label><i class="fas fa-check-square"></i> المرافق والخدمات</label>
+                    <div class="amenities-grid" id="amenities-grid"></div>
+                    <div class="amenity-add-row">
+                        <input type="text" id="new-amenity-input" placeholder="أضف مرفقاً..." maxlength="30">
+                        <button type="button" class="btn btn-primary" id="add-amenity-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" id="cancel-property">إلغاء</button>
+            <button class="btn btn-primary" id="save-property"><i class="fas fa-save"></i><span>حفظ</span></button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ ADD CATEGORY MODAL ============ -->
+<div class="modal" id="category-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>إضافة تصنيف جديد</h3>
+            <button class="close-modal" id="close-category-modal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="new-category-name">اسم التصنيف *</label>
+                <input type="text" id="new-category-name" placeholder="مثال: مزارع، شاليهات، مكاتب" maxlength="30">
+            </div>
+            <div class="form-group">
+                <label for="new-category-icon">أيقونة</label>
+                <select id="new-category-icon">
+                    <option value="fa-tag">🏷️ وسام</option>
+                    <option value="fa-house">🏠 منزل</option>
+                    <option value="fa-building">🏢 بناء</option>
+                    <option value="fa-store">🏪 متجر</option>
+                    <option value="fa-map-location-dot">🗺️ خريطة</option>
+                    <option value="fa-warehouse">🏭 مستودع</option>
+                    <option value="fa-umbrella-beach">🏖️ شاليه</option>
+                    <option value="fa-tractor">🚜 مزرعة</option>
+                    <option value="fa-briefcase">💼 مكتب</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" id="cancel-category">إلغاء</button>
+            <button class="btn btn-primary" id="save-category"><i class="fas fa-save"></i><span>إضافة</span></button>
+        </div>
+    </div>
+</div>
+
+<div class="alert-container" id="alert-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-client.js"></script>
+<script src="admin.js"></script>
+
+</body>
+</html>
