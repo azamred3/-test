@@ -1832,3 +1832,72 @@ ripple-fx {
     }
     .halo, .door-glow, .door { animation: none !important; }
 }
+
+
+/* ============================================================
+   تبويب الوسائط (صور / فيديوهات) داخل نافذة العقار
+   ============================================================ */
+.amt-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    margin-bottom: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+}
+.amt-tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 42px;
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    transition: var(--transition);
+}
+.amt-tab i { font-size: 14px; }
+.amt-tab small { opacity: .7; font-weight: 500; }
+.amt-tab.active { background: var(--accent); color: #fff; }
+.amt-pane { display: none; }
+.amt-pane.active { display: block; }
+
+/* ============================================================
+   موقع العقار على الخريطة
+   ============================================================ */
+.geo-map {
+    height: 280px;
+    margin-top: 10px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    position: relative;
+    z-index: 0;
+    background: var(--bg-element);
+}
+.geo-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+.geo-actions .btn { min-height: 46px; font-size: 13px; }
+.geo-actions .btn:disabled { opacity: .45; pointer-events: none; }
+.geo-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-muted);
+}
+.geo-pin {
+    background: none;
+    border: 0;
+    color: var(--amber);
+    font-size: 34px;
+    text-align: center;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .55));
+}
+.geo-pin i { display: block; line-height: 34px; }
