@@ -1,13 +1,15 @@
 /* ============================================================
-   عودة للعقار — script.js v7 (الهوية الجديدة)
-   نفس منطق Supabase والفلاتر والمفضلة والمقارنة، بواجهة جديدة:
-   Swiper للمعارض، GSAP للحركة، Phosphor للأيقونات.
+   عودة للعقار — script.js v8
+   + ورقة الحساب (الاسم + المفضلة + تسجيل الخروج)
+   + حركات: دائرة فتح التفاصيل، مؤشر تنقل منزلق، انفجار قلوب،
+     بارالاكس، ظهور البطاقات، عدّاد أرقام، ميل ثلاثي الأبعاد
    ============================================================ */
 (function () {
     'use strict';
 
     var LS_FAV = 'awda_favorites_v1';
     var MAX_COMPARE = 3;
+    var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     var STATUS_LABELS = {
         available: { label: 'متاح' },
@@ -24,25 +26,31 @@
     };
     var AMENITY_ICONS = {
         fiber: 'wifi-high', electricity: 'lightning', water: 'drop', gas: 'flame', sewage: 'pipe',
-        elevator: 'elevator', parking: 'car', pool: 'swimming-pool', garden: 'plant', security: 'shield-check',
-        cameras: 'security-camera', ac: 'snowflake', kitchen: 'cooking-pot', laundry: 'washing-machine',
+        elevator: 'arrows-vertical', parking: 'car', pool: 'swimming-pool', garden: 'plant', security: 'shield-check',
+        cameras: 'security-camera', ac: 'snowflake', kitchen: 'cooking-pot', laundry: 'tshirt',
         furnished: 'armchair', balcony: 'sun-horizon'
     };
 
-    var SHEETS = ['filter-sheet', 'favorites-drawer', 'compare-modal', 'inquiry-modal', 'share-modal'];
+    var SHEETS = ['filter-sheet', 'profile-sheet', 'compare-modal', 'inquiry-modal', 'share-modal'];
 
     var state = {
         properties: [], categories: [], filtered: [],
         filters: { category: 'all', transaction: '', minPrice: 0, maxPrice: 0, minArea: 0, maxArea: 0, term: '' },
         sort: 'newest', view: 'grid',
         favorites: [], compare: [],
+        user: null,
         map: null, mapMarkers: [],
-        featSwiper: null, gallerySwiper: null,
-        firstRender: true, loaded: false
+        featSwiper: null, featSig: '', gallerySwiper: null,
+        lastSig: null, catSig: '', statKey: '',
+        loaded: false
     };
 
+    var lastPt = { x: window.innerWidth / 2, y: window.innerHeight * .6 };
+    var revealIO = null;
+    var splashDone = false;
+
     function $(id) { return document.getElementById(id); }
-    function hasGsap() { return typeof window.gsap !== 'undefined'; }
+    function hasGsap() { return typeof window.gsap !== 'undefined' && !REDUCE; }
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -53,7 +61,10 @@
     function toast(msg, type) {
         var el = $('app-toast');
         if (!el) return;
-        el.textContent = msg;
+        var ico = type === 'success' ? 'ph-fill ph-check-circle' : type === 'error' ? 'ph-fill ph-warning-circle' : 'ph-fill ph-info';
+        el.innerHTML = '<i class="' + ico + '"></i><span>' + esc(msg) + '</span>';
+        el.className = 'app-toast ' + (type || '');
+        void el.offsetWidth;
         el.className = 'app-toast show ' + (type || '');
         clearTimeout(toast._t);
         toast._t = setTimeout(function () { el.className = 'app-toast ' + (type || ''); }, 2600);
@@ -113,6 +124,17 @@
     }
     function saveFav() { try { localStorage.setItem(LS_FAV, JSON.stringify(state.favorites)); } catch (e) {} }
 
+    function countUp(el, to) {
+        if (REDUCE || !to) { el.textContent = to; return; }
+        var start = performance.now(), dur = 1100;
+        (function f(t) {
+            var k = Math.min(1, (t - start) / dur);
+            k = 1 - Math.pow(1 - k, 4);
+            el.textContent = Math.round(to * k);
+            if (k < 1) requestAnimationFrame(f);
+        })(start);
+    }
+
     /* ============================================================
        الإقلاع
        ============================================================ */
@@ -120,28 +142,33 @@
     else init();
 
     async function init() {
-        var splashStart = Date.now();
+        var t0 = Date.now();
+        setTimeout(hideSplash, 6000); // شبكة بطيئة: لا تعلّق الشاشة
         loadLocal();
         bindEvents();
+        setNav('home', true);
         renderSkeletons();
         renderFavoritesCount();
-        loadGreeting();
+        renderUser();
+        startPlaceholder();
+        refreshAuth();
 
         await Promise.all([loadCategories(), loadProperties()]);
         state.loaded = true;
         applyFilters();
 
-        var wait = Math.max(0, 1100 - (Date.now() - splashStart));
-        setTimeout(hideSplash, wait);
+        setTimeout(hideSplash, Math.max(0, 1300 - (Date.now() - t0)));
     }
 
     function hideSplash() {
+        if (splashDone) return;
+        splashDone = true;
         var s = $('splash');
-        if (s) { s.classList.add('hide'); setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 700); }
+        if (s) { s.classList.add('hide'); setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 800); }
+        document.body.classList.add('ready');
         if (hasGsap()) {
-            gsap.from('.hero > *', { y: 26, opacity: 0, duration: .8, stagger: .09, ease: 'power3.out', delay: .1, clearProps: 'all' });
-            gsap.from('.app-header', { y: -30, opacity: 0, duration: .7, ease: 'power3.out', clearProps: 'all' });
-            gsap.from('.bottom-nav', { y: 80, opacity: 0, duration: .8, ease: 'back.out(1.4)', delay: .3, clearProps: 'all' });
+            gsap.from('.app-header', { y: -40, opacity: 0, duration: .8, ease: 'power3.out', clearProps: 'all' });
+            gsap.from('.bottom-nav', { y: 90, opacity: 0, duration: .9, ease: 'back.out(1.5)', delay: .35, clearProps: 'transform,opacity' });
         }
     }
 
@@ -184,39 +211,160 @@
         } catch (e) { state.properties = []; }
     }
 
-    async function loadGreeting() {
+    /* ============================================================
+       الحساب
+       ============================================================ */
+    async function refreshAuth() {
+        var user = null;
+        if (window.db && window.db.auth) {
+            try {
+                var res = await window.db.auth.getSession();
+                user = res && res.data && res.data.session && res.data.session.user;
+            } catch (e) {}
+            try {
+                window.db.auth.onAuthStateChange(function (ev, session) { setUser(session && session.user); });
+            } catch (e) {}
+        }
+        setUser(user);
+    }
+
+    function setUser(user) {
+        if (user) {
+            var md = user.user_metadata || {};
+            var name = md.full_name || md.name || md.username || (user.email ? user.email.split('@')[0] : 'مستخدم');
+            state.user = { name: String(name).trim() || 'مستخدم', email: user.email || '' };
+        } else state.user = null;
+        renderUser();
+    }
+
+    function renderUser() {
+        var u = state.user;
         var h = new Date().getHours();
         var g = h < 5 ? 'مساء الخير' : h < 12 ? 'صباح الخير' : h < 17 ? 'طاب يومك' : 'مساء الخير';
         var gEl = $('hero-greeting'); if (gEl) gEl.textContent = g;
 
-        var name = 'زائر';
-        if (window.db && window.db.auth) {
-            try {
-                var res = await window.db.auth.getUser();
-                var user = res && res.data && res.data.user;
-                if (user) {
-                    name = (user.user_metadata && user.user_metadata.full_name) || (user.email ? user.email.split('@')[0] : 'زائر');
-                }
-            } catch (e) {}
+        var first = u ? u.name.split(' ')[0].substring(0, 20) : 'زائر';
+        var nEl = $('welcome-name'); if (nEl) nEl.textContent = first;
+
+        var initial = u ? (Array.from(u.name)[0] || '؟').toUpperCase() : '';
+        var ic = $('profile-btn-icon'), ini = $('profile-btn-initial');
+        if (ic && ini) {
+            ic.style.display = u ? 'none' : '';
+            ini.hidden = !u;
+            ini.textContent = initial;
         }
-        name = String(name).trim().split(' ')[0];
-        if (name.length > 20) name = name.substring(0, 20);
-        var nEl = $('welcome-name'); if (nEl) nEl.textContent = name;
+
+        $('profile-initial').textContent = u ? initial : '؟';
+        $('profile-avatar').classList.toggle('guest', !u);
+        $('profile-name').textContent = u ? u.name : 'زائر';
+        $('profile-email').textContent = u ? u.email : '';
+        $('profile-role').textContent = u ? 'أهلاً بعودتك' : 'أنت تتصفح كزائر';
+        $('login-link').hidden = !!u;
+        $('logout-btn').hidden = !u;
+        resetLogoutBtn();
+    }
+
+    var logoutTimer = null;
+    function resetLogoutBtn() {
+        var b = $('logout-btn');
+        if (!b) return;
+        clearTimeout(logoutTimer);
+        b.classList.remove('confirm');
+        b.querySelector('span').textContent = 'تسجيل الخروج';
+    }
+
+    async function onLogoutClick() {
+        var b = $('logout-btn');
+        if (!b.classList.contains('confirm')) {
+            b.classList.add('confirm');
+            b.querySelector('span').textContent = 'اضغط مرة أخرى للتأكيد';
+            clearTimeout(logoutTimer);
+            logoutTimer = setTimeout(resetLogoutBtn, 3500);
+            return;
+        }
+        resetLogoutBtn();
+        try {
+            if (window.db && window.db.auth) await window.db.auth.signOut();
+        } catch (e) { toast('تعذر تسجيل الخروج', 'error'); return; }
+        setUser(null);
+        closeSheet('profile-sheet');
+        toast('تم تسجيل الخروج', 'success');
+    }
+
+    function openProfile() {
+        renderProfileFavs(true);
+        updateProfileCounts();
+        openSheet('profile-sheet');
+        if (hasGsap()) {
+            gsap.from('.profile-hero, .pstat', { y: 26, opacity: 0, duration: .6, stagger: .07, ease: 'power3.out', delay: .12, clearProps: 'all' });
+        }
+    }
+
+    function updateProfileCounts() {
+        $('pf-fav-count').textContent = state.favorites.length;
+        $('pf-cmp-count').textContent = state.compare.length;
+    }
+
+    function renderProfileFavs(animate) {
+        var body = $('favorites-body');
+        var list = state.properties.filter(function (p) { return state.favorites.indexOf(String(p.id)) !== -1; });
+        if (!list.length) {
+            body.innerHTML = '<div class="drawer-empty"><div class="e-ico"><i class="ph-fill ph-heart"></i></div><p>لا توجد عقارات في المفضلة بعد</p><small>اضغط على القلب في أي عقار لحفظه هنا</small></div>';
+            return;
+        }
+        body.innerHTML = list.map(function (p) {
+            return '<div class="fav-item" data-fav-open="' + esc(p.id) + '"><img src="' + esc(p.images[0]) + '" alt="">' +
+                '<div class="fav-info"><div class="fav-title">' + esc(p.title) + '</div><div class="fav-price">' + esc(p.price) + '</div></div>' +
+                '<button class="fav-remove" data-act="fav" data-id="' + esc(p.id) + '" aria-label="إزالة"><i class="ph ph-heart-break"></i></button></div>';
+        }).join('');
+        body.querySelectorAll('[data-fav-open]').forEach(function (el) {
+            el.onclick = function (e) {
+                if (e.target.closest('[data-act]')) return;
+                closeSheet('profile-sheet');
+                openPreview(el.dataset.favOpen);
+            };
+        });
+        if (animate && hasGsap()) {
+            gsap.from('.fav-item', { x: 40, opacity: 0, duration: .55, stagger: .06, ease: 'power3.out', delay: .25, clearProps: 'all' });
+        }
     }
 
     /* ============================================================
-       الأوراق والقفل
+       الأوراق والقفل والتنقل
        ============================================================ */
+    function isOpen(id) { var e = $(id); return !!(e && e.classList.contains('open')); }
+
     function syncLock() {
-        var open = SHEETS.some(function (id) { var e = $(id); return e && e.classList.contains('open'); }) ||
-                   $('preview-overlay').classList.contains('open');
-        document.body.classList.toggle('locked', open);
-        var anySheet = SHEETS.some(function (id) { var e = $(id); return e && e.classList.contains('open'); });
+        var anySheet = SHEETS.some(isOpen);
+        var prev = $('preview-overlay').classList.contains('open');
+        document.body.classList.toggle('locked', anySheet || prev);
         $('backdrop').classList.toggle('show', anySheet);
+        setNav(isOpen('profile-sheet') ? 'profile' : (state.view === 'map' ? 'map' : 'home'));
     }
     function openSheet(id) { $(id).classList.add('open'); syncLock(); }
-    function closeSheet(id) { var e = $(id); if (e) e.classList.remove('open'); syncLock(); }
-    function closeAllSheets() { SHEETS.forEach(function (id) { var e = $(id); if (e) e.classList.remove('open'); }); syncLock(); }
+    function closeSheet(id) {
+        var e = $(id); if (e) e.classList.remove('open');
+        if (id === 'profile-sheet') resetLogoutBtn();
+        syncLock();
+    }
+    function closeAllSheets() { SHEETS.forEach(function (id) { var e = $(id); if (e) e.classList.remove('open'); }); resetLogoutBtn(); syncLock(); }
+
+    function setNav(name, instant) {
+        var nav = $('bottom-nav'), pill = $('nav-pill'), target = null;
+        if (!nav || !pill) return;
+        nav.querySelectorAll('.nav-item[data-nav]').forEach(function (b) {
+            var on = b.dataset.nav === name;
+            var wasOn = b.classList.contains('active');
+            b.classList.toggle('active', on);
+            var i = b.querySelector('i');
+            if (on !== wasOn || instant) i.className = (on ? 'ph-fill' : 'ph') + ' ph-' + b.dataset.icon;
+            if (on) target = b;
+        });
+        if (!target) return;
+        pill.style.width = target.offsetWidth + 'px';
+        pill.style.transform = 'translateX(' + target.offsetLeft + 'px)';
+        if (instant) requestAnimationFrame(function () { requestAnimationFrame(function () { pill.classList.add('anim'); }); });
+    }
 
     /* ============================================================
        الأحداث
@@ -227,8 +375,11 @@
         si.addEventListener('focus', onSearchInput);
         $('search-clear').onclick = clearSearch;
 
-        $('favorites-btn').onclick = openFavorites;
-        $('favorites-close').onclick = function () { closeSheet('favorites-drawer'); };
+        $('favorites-btn').onclick = openProfile;
+        $('profile-btn').onclick = openProfile;
+        $('profile-close').onclick = function () { closeSheet('profile-sheet'); };
+        $('logout-btn').onclick = onLogoutClick;
+
         $('filter-toggle-btn').onclick = openFilters;
         $('filter-sheet-close').onclick = function () { closeSheet('filter-sheet'); };
         $('filter-apply-btn').onclick = applyFiltersFromSheet;
@@ -244,7 +395,7 @@
 
         document.querySelectorAll('.view-btn').forEach(function (b) { b.onclick = function () { setView(b.dataset.view); }; });
 
-        $('compare-open-btn').onclick = openCompare;
+        $('compare-open-btn').onclick = function () { openCompare(); };
         $('compare-clear-btn').onclick = clearCompare;
         $('compare-close').onclick = function () { closeSheet('compare-modal'); };
 
@@ -255,39 +406,49 @@
         $('inquiry-cancel').onclick = closeInquiry;
         $('inquiry-submit').onclick = submitInquiry;
 
-        // تنقل سفلي
         document.querySelectorAll('.nav-item[data-nav]').forEach(function (b) {
             b.onclick = function () {
                 var n = b.dataset.nav;
-                if (n === 'home') { goHome(); }
-                else if (n === 'map') { setView('map'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-                else if (n === 'fav') { openFavorites(); }
+                if (n === 'home') goHome();
+                else if (n === 'map') { closeAllSheets(); closePreview(); setView('map'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+                else if (n === 'profile') { if (isOpen('profile-sheet')) closeSheet('profile-sheet'); else openProfile(); }
             };
         });
+        window.addEventListener('resize', function () {
+            setNav(isOpen('profile-sheet') ? 'profile' : (state.view === 'map' ? 'map' : 'home'), true);
+            fitMapFrame();
+        });
+        $('map-fit').onclick = function () {
+            if (!state.map) return;
+            if (state.mapBounds && state.mapBounds.length) { try { state.map.fitBounds(state.mapBounds, { padding: [40, 40], maxZoom: 14, animate: true }); } catch (e) {} }
+            else state.map.setView([24.7136, 46.6753], 6);
+        };
 
-        // الشعار
         var logo = $('home-logo-btn');
         logo.onclick = goHome;
         logo.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goHome(); } };
 
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return;
-            var openSheetEl = SHEETS.some(function (id) { return $(id).classList.contains('open'); });
-            if (openSheetEl) closeAllSheets(); else closePreview();
+            if (SHEETS.some(isOpen)) closeAllSheets(); else closePreview();
         });
 
-        // ترويسة تتغير بالتمرير
-        var header = $('app-header');
-        var ticking = false;
-        window.addEventListener('scroll', function () {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(function () { header.classList.toggle('is-scrolled', window.scrollY > 12); ticking = false; });
-        }, { passive: true });
+        // نقطة اللمس — منها تنفتح دائرة التفاصيل
+        document.addEventListener('pointerdown', function (e) {
+            lastPt = { x: e.clientX, y: e.clientY };
+            ripple(e);
+        }, true);
+
+        bindScroll();
+        bindPreviewScroll();
+        bindTilt();
 
         window.addEventListener('popstate', function () { closePreview(true); });
-
         document.addEventListener('click', onGlobalClick);
+        document.addEventListener('click', function (e) {
+            var b = e.target.closest && e.target.closest('[data-popup-open]');
+            if (b) { if (state.map) state.map.closePopup(); openPreview(b.dataset.popupOpen); }
+        });
     }
 
     function goHome() {
@@ -295,6 +456,20 @@
         closePreview();
         if (state.view !== 'grid') setView('grid');
         try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+    }
+
+    function ripple(e) {
+        var t = e.target.closest && e.target.closest('.btn, .chip-option, .mini-btn, .toolbar-btn');
+        if (!t || REDUCE) return;
+        var r = t.getBoundingClientRect();
+        var size = Math.max(r.width, r.height) * 2.2;
+        var s = document.createElement('span');
+        s.className = 'ripple-fx';
+        s.style.width = s.style.height = size + 'px';
+        s.style.left = (e.clientX - r.left - size / 2) + 'px';
+        s.style.top = (e.clientY - r.top - size / 2) + 'px';
+        t.appendChild(s);
+        setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 700);
     }
 
     function onGlobalClick(e) {
@@ -305,14 +480,13 @@
         if (actEl) {
             e.preventDefault(); e.stopPropagation();
             var a = actEl.dataset.act, id = actEl.dataset.id;
-            if (a === 'fav') toggleFavorite(id);
+            if (a === 'fav') toggleFavorite(id, actEl);
             else if (a === 'compare') toggleCompare(id);
             else if (a === 'share') openShare(id);
             else if (a === 'inquiry') openInquiry(id);
             else if (a === 'map') { var p = byId(id), q = p && mapQuery(p); if (q) window.open(mapsLink(q), '_blank'); else toast('لا يوجد موقع محدد لهذا العقار', 'error'); }
             else if (a === 'directions') { var p2 = byId(id), q2 = p2 && mapQuery(p2); if (q2) window.open(mapsDir(q2), '_blank'); }
             else if (a === 'cat') { state.filters.category = id; applyFilters(); }
-            else if (a === 'open') openPreview(id);
             else if (a === 'reset') resetFilters();
             return;
         }
@@ -329,6 +503,76 @@
 
         var card = t.closest('[data-card]');
         if (card) openPreview(card.dataset.card);
+    }
+
+    /* ============================================================
+       التمرير: ترويسة، تقدّم، بارالاكس
+       ============================================================ */
+    function bindScroll() {
+        var header = $('app-header'), prog = $('scroll-progress'), aurora = $('aurora');
+        var lastY = 0, ticking = false;
+        function frame() {
+            var y = window.scrollY || 0;
+            header.classList.toggle('is-scrolled', y > 12);
+            var dy = y - lastY;
+            if (y > 160 && dy > 5) header.classList.add('is-hidden');
+            else if (dy < -5 || y <= 160) header.classList.remove('is-hidden');
+            if (Math.abs(dy) > 5) lastY = y;
+            var max = document.documentElement.scrollHeight - window.innerHeight;
+            prog.style.transform = 'scaleX(' + (max > 0 ? Math.min(1, y / max) : 0) + ')';
+            if (!REDUCE) aurora.style.transform = 'translateY(' + (-Math.min(y * .12, 140)) + 'px)';
+            ticking = false;
+        }
+        window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(frame); } }, { passive: true });
+    }
+
+    function bindPreviewScroll() {
+        var pc = document.querySelector('.preview-content');
+        var ticking = false;
+        pc.addEventListener('scroll', function () {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(function () {
+                var y = pc.scrollTop;
+                var g = pc.querySelector('.gallery');
+                if (g) g.style.setProperty('--sy', y);
+                var gh = g ? g.offsetHeight : 300;
+                $('topbar-price').classList.toggle('show', y > gh - 90);
+                ticking = false;
+            });
+        }, { passive: true });
+    }
+
+    function bindTilt() {
+        if (!window.matchMedia || !window.matchMedia('(hover:hover) and (pointer:fine)').matches || REDUCE) return;
+        var cur = null;
+        function reset(c) { c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); }
+        document.addEventListener('mousemove', function (e) {
+            var c = e.target.closest ? e.target.closest('.p-card') : null;
+            if (cur && cur !== c) reset(cur);
+            cur = c;
+            if (!c) return;
+            var r = c.getBoundingClientRect();
+            var px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
+            c.style.setProperty('--ry', (px * 9).toFixed(2) + 'deg');
+            c.style.setProperty('--rx', (-py * 9).toFixed(2) + 'deg');
+            c.style.setProperty('--gx', ((px + .5) * 100).toFixed(1) + '%');
+            c.style.setProperty('--gy', ((py + .5) * 100).toFixed(1) + '%');
+        });
+    }
+
+    function startPlaceholder() {
+        var input = $('search-input');
+        var base = input.placeholder;
+        var phrases = ['فيلا في الرياض', 'شقة للإيجار', 'أرض تجارية', 'مزرعة قريبة', 'رمز العقار'];
+        var pi = 0, ci = 0;
+        if (REDUCE) return;
+        (function tick() {
+            if (document.activeElement === input || input.value) { input.placeholder = base; ci = 0; return setTimeout(tick, 1500); }
+            var ph = phrases[pi];
+            if (ci <= ph.length) { input.placeholder = 'ابحث عن ' + ph.slice(0, ci); ci++; setTimeout(tick, 85); }
+            else setTimeout(function () { pi = (pi + 1) % phrases.length; ci = 0; tick(); }, 1900);
+        })();
     }
 
     /* ============================================================
@@ -416,7 +660,7 @@
         state.filters.category = ct ? ct.dataset.val : 'all';
         applyFilters();
         closeSheet('filter-sheet');
-        toast('تم تطبيق الفلاتر ✓', 'success');
+        toast('تم تطبيق الفلاتر', 'success');
     }
 
     function resetFilters() {
@@ -469,16 +713,28 @@
     function setView(mode) {
         state.view = mode;
         document.querySelectorAll('.view-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.view === mode); });
-        document.querySelectorAll('.nav-item[data-nav]').forEach(function (b) {
-            var n = b.dataset.nav;
-            b.classList.toggle('active', (mode === 'map' && n === 'map') || (mode === 'grid' && n === 'home'));
-        });
         var isMap = mode === 'map';
+        document.body.classList.toggle('map-mode', isMap);
         $('properties-container').style.display = isMap ? 'none' : '';
-        $('properties-map').style.display = isMap ? 'block' : 'none';
+        $('map-frame').style.display = isMap ? 'block' : 'none';
         $('featured-section').style.display = isMap ? 'none' : '';
-        if (isMap) { renderMap(); }
-        else { renderResults(); renderFeatured(); }
+        if (isMap) {
+            window.scrollTo(0, 0);
+            requestAnimationFrame(function () { fitMapFrame(); renderMap(); });
+        } else { renderResults(); renderFeatured(); }
+        syncLock();
+    }
+
+    // يضبط ارتفاع إطار الخريطة ليملأ المساحة المتبقية بين الأدوات والشريط السفلي في أي هاتف
+    function fitMapFrame() {
+        var fr = $('map-frame');
+        if (!fr || state.view !== 'map' || fr.style.display === 'none') return;
+        fr.classList.toggle('has-compare', !$('compare-bar').hidden);
+        var top = fr.getBoundingClientRect().top + (window.scrollY || 0);
+        var mb = parseFloat(getComputedStyle(fr).marginBottom) || 0;
+        var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+        fr.style.height = Math.max(260, Math.round(vh - top - mb)) + 'px';
+        if (state.map) state.map.invalidateSize();
     }
 
     /* ============================================================
@@ -490,11 +746,16 @@
 
     function renderStats() {
         var box = $('hero-stats');
-        if (!box) return;
         var avail = state.properties.filter(function (p) { return p.status === 'available'; }).length;
+        var key = avail + '|' + state.categories.length;
+        if (state.statKey === key) return;
+        state.statKey = key;
         box.innerHTML =
-            '<span class="stat-pill"><i class="ph-fill ph-buildings"></i><b>' + avail + '</b> عقار متاح</span>' +
-            '<span class="stat-pill"><i class="ph-fill ph-squares-four"></i><b>' + state.categories.length + '</b> تصنيف</span>';
+            '<span class="stat-pill"><i class="ph-fill ph-buildings"></i><b data-n="' + avail + '">0</b> عقار متاح</span>' +
+            '<span class="stat-pill"><i class="ph-fill ph-squares-four"></i><b data-n="' + state.categories.length + '">0</b> تصنيف</span>';
+        setTimeout(function () {
+            box.querySelectorAll('b[data-n]').forEach(function (b) { countUp(b, parseInt(b.dataset.n, 10) || 0); });
+        }, 750);
     }
 
     function renderCats() {
@@ -503,22 +764,41 @@
         state.categories.forEach(function (c) { counts[c.name] = 0; });
         state.properties.forEach(function (p) { if (counts[p.type] !== undefined) counts[p.type]++; });
 
-        function tile(val, label, icon, count) {
-            return '<button class="cat-tile' + (state.filters.category === val ? ' active' : '') + '" data-act="cat" data-id="' + esc(val) + '">' +
-                '<span class="cat-ico"><i class="ph ' + icon + '"></i></span>' +
-                '<span class="cat-label">' + esc(label) + '</span><span class="cat-count">' + count + '</span></button>';
+        var sig = JSON.stringify(counts);
+        if (sig !== state.catSig) {
+            var first = !state.catSig;
+            state.catSig = sig;
+            var i = 0;
+            var tile = function (val, label, icon, count) {
+                return '<button class="cat-tile' + (first ? ' pop' : '') + '" style="--i:' + (i++) + '" data-act="cat" data-id="' + esc(val) + '">' +
+                    '<span class="cat-ico"><i class="ph ' + icon + '"></i></span>' +
+                    '<span class="cat-label">' + esc(label) + '</span><span class="cat-count">' + count + '</span></button>';
+            };
+            box.innerHTML = tile('all', 'الكل', 'ph-squares-four', counts.all) +
+                state.categories.map(function (c) { return tile(c.name, c.name, catIcon(c.name), counts[c.name] || 0); }).join('');
         }
-        box.innerHTML = tile('all', 'الكل', 'ph-squares-four', counts.all) +
-            state.categories.map(function (c) { return tile(c.name, c.name, catIcon(c.name), counts[c.name] || 0); }).join('');
+
+        var activeEl = null;
+        box.querySelectorAll('.cat-tile').forEach(function (t) {
+            var on = t.dataset.id === state.filters.category;
+            if (on && !t.classList.contains('active')) activeEl = t;
+            t.classList.toggle('active', on);
+        });
+        if (activeEl && state.loaded) { try { activeEl.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); } catch (e) {} }
     }
 
     function renderFeatured() {
         var sec = $('featured-section');
         if (state.view === 'map') return;
         var items = state.properties.filter(function (p) { return p.status === 'available'; }).slice(0, 8);
-        if (state.featSwiper) { try { state.featSwiper.destroy(true, true); } catch (e) {} state.featSwiper = null; }
         if (hasActiveFilters() || items.length < 2) { sec.hidden = true; return; }
+
+        var sig = items.map(function (p) { return p.id; }).join(',');
+        if (sig === state.featSig && state.featSwiper) { sec.hidden = false; return; }
+        state.featSig = sig;
+        if (state.featSwiper) { try { state.featSwiper.destroy(true, true); } catch (e) {} state.featSwiper = null; }
         sec.hidden = false;
+
         $('feat-wrapper').innerHTML = items.map(function (p) {
             return '<div class="swiper-slide feat-slide"><article class="feat-card" data-card="' + esc(p.id) + '">' +
                 '<img src="' + esc(p.images[0]) + '" alt="" loading="lazy" onerror="this.src=\'https://via.placeholder.com/400x500\'">' +
@@ -529,15 +809,34 @@
                 '<div class="feat-loc"><i class="ph ph-map-pin"></i><span>' + esc(p.location) + '</span></div></div>' +
             '</article></div>';
         }).join('');
-        if (typeof Swiper !== 'undefined') {
-            state.featSwiper = new Swiper('#feat-swiper', { slidesPerView: 'auto', spaceBetween: 12, freeMode: true, grabCursor: true, resistanceRatio: .6 });
+
+        if (typeof Swiper === 'undefined') return;
+        function fx(sw) {
+            sw.slides.forEach(function (s) {
+                var pr = Math.max(-1.5, Math.min(1.5, s.progress));
+                var card = s.firstElementChild, img = card && card.querySelector('img');
+                if (!card) return;
+                var k = Math.min(1, Math.abs(pr));
+                card.style.transform = 'scale(' + (1 - k * .09) + ')';
+                card.style.opacity = String(1 - k * .35);
+                if (img) img.style.transform = 'translateX(' + (pr * 34) + 'px)';
+            });
         }
+        state.featSwiper = new Swiper('#feat-swiper', {
+            slidesPerView: 'auto', spaceBetween: 12, centeredSlides: true, grabCursor: true,
+            watchSlidesProgress: true, resistanceRatio: .6, speed: 500,
+            on: { init: fx, progress: fx, setTranslate: fx, resize: fx }
+        });
     }
 
     function renderResults() {
         $('results-count').textContent = state.filtered.length + ' عقار';
         if (state.view === 'map') { renderMap(); return; }
         var box = $('properties-container');
+
+        var sig = state.filtered.map(function (p) { return p.id; }).join(',');
+        if (sig === state.lastSig && box.children.length && !box.querySelector('.skeleton')) return;
+        state.lastSig = sig;
 
         if (state.filtered.length === 0) {
             box.innerHTML = '<div class="empty-results"><div class="e-ico"><i class="ph ph-house-simple"></i></div>' +
@@ -547,16 +846,22 @@
         }
 
         box.innerHTML = state.filtered.map(cardHtml).join('');
+        observeReveal(box);
+    }
 
-        if (hasGsap() && state.loaded) {
-            var nodes = box.querySelectorAll('.p-card');
-            if (state.firstRender) {
-                gsap.from(Array.prototype.slice.call(nodes, 0, 8), { y: 36, opacity: 0, duration: .65, stagger: .07, ease: 'power3.out', delay: .5, clearProps: 'opacity,transform' });
-                state.firstRender = false;
-            } else {
-                gsap.from(Array.prototype.slice.call(nodes, 0, 8), { y: 18, opacity: 0, duration: .4, stagger: .04, ease: 'power2.out', clearProps: 'opacity,transform' });
-            }
-        }
+    function observeReveal(box) {
+        var cards = box.querySelectorAll('.p-card');
+        if (revealIO) { revealIO.disconnect(); revealIO = null; }
+        if (!('IntersectionObserver' in window) || REDUCE) { cards.forEach(function (c) { c.classList.add('in'); }); return; }
+        revealIO = new IntersectionObserver(function (entries) {
+            var vis = entries.filter(function (e) { return e.isIntersecting; });
+            vis.forEach(function (e, i) {
+                e.target.style.setProperty('--d', (i * 80) + 'ms');
+                e.target.classList.add('in');
+                revealIO.unobserve(e.target);
+            });
+        }, { threshold: .06, rootMargin: '0px 0px -30px 0px' });
+        cards.forEach(function (c) { revealIO.observe(c); });
     }
 
     function cardHtml(p) {
@@ -570,7 +875,7 @@
             tags.push('<span class="p-tag"><i class="ph ' + amenityIcon(f) + '"></i>' + esc(amenityLabel(f)) + '</span>');
         });
 
-        return '<article class="p-card' + (closed ? ' is-closed' : '') + '" data-card="' + esc(p.id) + '">' +
+        return '<article class="p-card reveal' + (closed ? ' is-closed' : '') + '" data-card="' + esc(p.id) + '">' +
             '<div class="p-img">' +
                 '<img src="' + esc(p.images[0]) + '" alt="" loading="lazy" onerror="this.src=\'https://via.placeholder.com/400x300\'">' +
                 '<span class="p-badge glass">' + esc(p.type) + '</span>' +
@@ -595,48 +900,63 @@
         '</article>';
     }
 
+    // تحديث حالة القلب والمقارنة على البطاقات دون إعادة بنائها
+    function syncCardStates() {
+        document.querySelectorAll('.p-card').forEach(function (card) {
+            var id = card.dataset.card;
+            var fav = state.favorites.indexOf(id) !== -1;
+            var cmp = state.compare.indexOf(id) !== -1;
+            var f = card.querySelector('.p-fav');
+            if (f) { f.classList.toggle('on', fav); f.querySelector('i').className = 'ph' + (fav ? '-fill' : '') + ' ph-heart'; }
+            var c = card.querySelector('[data-act="compare"]');
+            if (c) c.classList.toggle('on-compare', cmp);
+        });
+    }
+
     /* ============================================================
        المفضلة
        ============================================================ */
-    function toggleFavorite(id) {
+    function burst(el) {
+        if (!hasGsap() || !el) return;
+        var r = el.getBoundingClientRect();
+        var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        for (var i = 0; i < 11; i++) {
+            (function (i) {
+                var s = document.createElement('i');
+                s.className = 'ph-fill ph-heart fx-heart';
+                s.style.left = cx + 'px'; s.style.top = cy + 'px';
+                s.style.fontSize = (11 + Math.random() * 11) + 'px';
+                s.style.color = i % 3 === 0 ? '#FFC56B' : (i % 3 === 1 ? '#FF6B81' : '#60A5FA');
+                document.body.appendChild(s);
+                var a = Math.PI * 2 * i / 11 + Math.random() * .5, d = 40 + Math.random() * 42;
+                gsap.fromTo(s, { x: 0, y: 0, xPercent: -50, yPercent: -50, scale: .3, opacity: 1 },
+                    { x: Math.cos(a) * d, y: Math.sin(a) * d - 12, scale: 1, opacity: 0, rotation: (Math.random() - .5) * 100,
+                      duration: .85 + Math.random() * .3, ease: 'power2.out',
+                      onComplete: function () { if (s.parentNode) s.parentNode.removeChild(s); } });
+            })(i);
+        }
+    }
+
+    function toggleFavorite(id, srcEl) {
         id = String(id);
         var i = state.favorites.indexOf(id);
-        if (i === -1) { state.favorites.push(id); toast('أضيف للمفضلة ❤️', 'success'); }
+        if (i === -1) { state.favorites.push(id); burst(srcEl); toast('أضيف إلى مفضلتك', 'success'); }
         else { state.favorites.splice(i, 1); toast('أُزيل من المفضلة'); }
         saveFav();
         renderFavoritesCount();
-        renderResults();
-        renderFavoritesDrawer();
+        syncCardStates();
+        renderProfileFavs(false);
         syncPreviewButtons(id);
     }
 
     function renderFavoritesCount() {
         var el = $('fav-count');
         var c = state.favorites.length;
-        el.textContent = c; el.hidden = c === 0;
-    }
-
-    function openFavorites() { renderFavoritesDrawer(); openSheet('favorites-drawer'); }
-
-    function renderFavoritesDrawer() {
-        var body = $('favorites-body');
-        var list = state.properties.filter(function (p) { return state.favorites.indexOf(String(p.id)) !== -1; });
-        if (!list.length) {
-            body.innerHTML = '<div class="drawer-empty"><div class="e-ico"><i class="ph-fill ph-heart"></i></div><p>لا توجد عقارات في المفضلة بعد</p><small>اضغط على القلب في أي عقار لحفظه</small></div>';
-            return;
+        if (el.textContent !== String(c) || el.hidden === (c > 0)) {
+            el.textContent = c; el.hidden = c === 0;
+            el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
         }
-        body.innerHTML = list.map(function (p) {
-            return '<div class="fav-item" data-fav-open="' + esc(p.id) + '"><img src="' + esc(p.images[0]) + '" alt="">' +
-                '<div class="fav-info"><div class="fav-title">' + esc(p.title) + '</div><div class="fav-price">' + esc(p.price) + '</div></div>' +
-                '<button class="fav-remove" data-act="fav" data-id="' + esc(p.id) + '" aria-label="إزالة"><i class="ph ph-heart-break"></i></button></div>';
-        }).join('');
-        body.querySelectorAll('[data-fav-open]').forEach(function (el) {
-            el.onclick = function (e) {
-                if (e.target.closest('[data-act]')) return;
-                closeSheet('favorites-drawer');
-                openPreview(el.dataset.favOpen);
-            };
-        });
+        updateProfileCounts();
     }
 
     /* ============================================================
@@ -651,27 +971,29 @@
             state.compare.push(id); toast('أضيف للمقارنة', 'success');
         }
         renderCompareBar();
-        renderResults();
+        syncCardStates();
         syncPreviewButtons(id);
-        if ($('compare-modal').classList.contains('open')) {
+        updateProfileCounts();
+        if (isOpen('compare-modal')) {
             if (state.compare.length) openCompare(true); else closeSheet('compare-modal');
         }
     }
 
     function renderCompareBar() {
         var bar = $('compare-bar');
-        if (!state.compare.length) { bar.hidden = true; return; }
+        if (!state.compare.length) { bar.hidden = true; fitMapFrame(); return; }
         bar.hidden = false;
         $('compare-thumbs').innerHTML = state.compare.map(function (id) {
             var p = byId(id);
             return '<img src="' + esc(p ? p.images[0] : '') + '" alt="">';
         }).join('');
+        fitMapFrame();
     }
 
     function clearCompare() {
         state.compare = [];
-        renderCompareBar(); renderResults();
-        var id = currentPreviewId; if (id) syncPreviewButtons(id);
+        renderCompareBar(); syncCardStates(); updateProfileCounts();
+        if (currentPreviewId) syncPreviewButtons(currentPreviewId);
         toast('تم مسح المقارنة');
     }
 
@@ -769,30 +1091,38 @@
         var content = document.querySelector('.preview-content');
         content.innerHTML = html;
         content.scrollTop = 0;
+        $('topbar-price').textContent = p.price;
+        $('topbar-price').classList.remove('show');
 
         $('preview-contact').innerHTML =
             '<button class="btn btn-wa" data-act="inquiry" data-id="' + esc(p.id) + '"><i class="ph-fill ph-whatsapp-logo"></i> تواصل مع الوكيل</button>' +
             '<button class="mini-btn" data-act="share" data-id="' + esc(p.id) + '" aria-label="مشاركة"><i class="ph ph-share-network"></i></button>';
 
-        $('preview-favorite-btn').onclick = function () { toggleFavorite(p.id); };
+        $('preview-favorite-btn').onclick = function () { toggleFavorite(p.id, $('preview-favorite-btn')); };
         $('preview-compare-btn').onclick = function () { toggleCompare(p.id); };
         $('preview-share-btn').onclick = function () { openShare(p.id); };
 
         if (state.gallerySwiper) { try { state.gallerySwiper.destroy(true, true); } catch (e) {} state.gallerySwiper = null; }
         if (typeof Swiper !== 'undefined') {
             state.gallerySwiper = new Swiper('#gallery-swiper', {
-                loop: false, grabCursor: true, speed: 450,
+                grabCursor: true, speed: 500,
                 pagination: p.images.length > 1 ? { el: '.gallery .swiper-pagination', clickable: true } : false,
                 on: { slideChange: function (s) { var c = $('gallery-counter'); if (c) c.textContent = (s.activeIndex + 1) + ' / ' + p.images.length; } }
             });
         }
 
-        $('preview-overlay').classList.add('open');
+        // دائرة تتسع من نقطة اللمس
+        var o = $('preview-overlay');
+        o.style.setProperty('--ox', Math.round(lastPt.x) + 'px');
+        o.style.setProperty('--oy', Math.round(lastPt.y) + 'px');
+        o.classList.add('open');
         syncPreviewButtons(p.id);
         syncLock();
 
         if (hasGsap()) {
-            gsap.from('.details > *', { y: 22, opacity: 0, duration: .55, stagger: .06, ease: 'power3.out', delay: .15, clearProps: 'all' });
+            gsap.from('.preview-topbar > *', { y: -30, opacity: 0, duration: .6, stagger: .06, ease: 'back.out(1.6)', delay: .3, clearProps: 'all' });
+            gsap.from('.details > *', { y: 30, opacity: 0, duration: .7, stagger: .07, ease: 'power3.out', delay: .35, clearProps: 'all' });
+            gsap.from('.preview-contact', { y: 80, duration: .7, ease: 'power3.out', delay: .4, clearProps: 'all' });
         }
 
         if (!previewPushed) { try { history.pushState({ preview: 1 }, ''); previewPushed = true; } catch (e) {} }
@@ -803,8 +1133,7 @@
         if (!o.classList.contains('open')) return;
         o.classList.remove('open');
         if (state.gallerySwiper) { try { state.gallerySwiper.destroy(true, true); } catch (e) {} state.gallerySwiper = null; }
-        // أوقف أي فيديو
-        setTimeout(function () { var c = document.querySelector('.preview-content'); if (c && !o.classList.contains('open')) c.innerHTML = ''; }, 500);
+        setTimeout(function () { var c = document.querySelector('.preview-content'); if (c && !o.classList.contains('open')) c.innerHTML = ''; }, 700);
         currentPreviewId = null;
         if (!fromPop && previewPushed) { previewPushed = false; try { history.back(); } catch (e) {} }
         else previewPushed = false;
@@ -846,7 +1175,7 @@
         if (!p) return;
         inquiryPropertyId = p.id;
         $('inquiry-property-title').textContent = p.title;
-        $('inquiry-name').value = '';
+        $('inquiry-name').value = state.user ? state.user.name : '';
         $('inquiry-phone').value = '';
         $('inquiry-message').value = 'أنا مهتم بهذا العقار، يرجى التواصل معي.';
         openSheet('inquiry-modal');
@@ -870,7 +1199,7 @@
         var agentPhone = p.agent.phone || '966500000000';
         var wa = 'مرحباً، أنا ' + name + ' (' + phone + ')\n\nأرغب بالاستفسار عن العقار: ' + p.title + ' (' + p.code + ')\nالسعر: ' + p.price + '\n\n' + message;
         window.open('https://wa.me/' + agentPhone + '?text=' + encodeURIComponent(wa), '_blank');
-        toast('تم الإرسال ✓', 'success');
+        toast('تم الإرسال', 'success');
         closeInquiry();
     }
 
@@ -907,13 +1236,13 @@
             bounds.push([lat, lng]);
         });
 
+        state.mapBounds = bounds;
+        var total = state.filtered.length;
+        $('map-chip-text').textContent = bounds.length === total
+            ? bounds.length + ' عقار على الخريطة'
+            : bounds.length + ' من ' + total + ' على الخريطة';
         if (bounds.length) { try { state.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 }); } catch (e) {} }
     }
-
-    document.addEventListener('click', function (e) {
-        var b = e.target.closest && e.target.closest('[data-popup-open]');
-        if (b) { if (state.map) state.map.closePopup(); openPreview(b.dataset.popupOpen); }
-    });
 
     window.addEventListener('load', function () {
         var pid = new URLSearchParams(window.location.search).get('property');
