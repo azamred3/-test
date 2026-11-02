@@ -2,30 +2,58 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#1A1621">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#14111B">
     <meta name="color-scheme" content="dark">
     <title>لوحة التحكم — عودة للعقار</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="admin.css">
 </head>
 <body>
 
+<!-- خلفية حية: ثلاث هالات + حبيبات خفيفة -->
+<div class="ambient" aria-hidden="true">
+    <span class="halo halo-blue"></span>
+    <span class="halo halo-amber"></span>
+    <span class="halo halo-violet"></span>
+    <span class="grain"></span>
+</div>
+
 <header class="app-header">
     <div class="header-inner">
         <div class="logo-container">
-            <div class="logo-mark"><i class="fas fa-home"></i></div>
+            <!-- الباب المضاء: بيت أزرق بباب كهرماني مقوّس في ليل بنفسجي -->
+            <div class="logo-mark">
+                <svg viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+                    <defs>
+                        <linearGradient id="lgHouse" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" stop-color="#60A5FA"/>
+                            <stop offset="1" stop-color="#2563EB"/>
+                        </linearGradient>
+                        <radialGradient id="lgGlow" cx=".5" cy=".5" r=".5">
+                            <stop offset="0" stop-color="#FFC56B" stop-opacity=".9"/>
+                            <stop offset="1" stop-color="#FFC56B" stop-opacity="0"/>
+                        </radialGradient>
+                    </defs>
+                    <circle cx="8" cy="8" r="0.9" fill="#A78BFA" opacity=".7"/>
+                    <circle cx="36" cy="9" r="0.7" fill="#A78BFA" opacity=".6"/>
+                    <circle cx="30" cy="4.5" r="0.6" fill="#A78BFA" opacity=".5"/>
+                    <ellipse class="door-glow" cx="22" cy="34" rx="12" ry="11" fill="url(#lgGlow)"/>
+                    <path d="M22 8.5 L37.5 20.5 V35 a2.5 2.5 0 0 1 -2.5 2.5 H9 a2.5 2.5 0 0 1 -2.5 -2.5 V20.5 Z" fill="url(#lgHouse)"/>
+                    <path class="door" d="M17.5 37.5 V30 a4.5 4.5 0 0 1 9 0 V37.5 Z" fill="#FFC56B"/>
+                </svg>
+            </div>
             <div class="logo-text">
-                <span class="admin-title">عودة للعقار</span>
-                <span class="admin-subtitle">لوحة التحكم</span>
+                <span class="admin-title">عودة <em>للعقار</em></span>
+                <span class="admin-subtitle">الإدارة</span>
             </div>
         </div>
         <div class="user-actions">
-            <button class="icon-btn" id="refresh-btn" title="تحديث"><i class="fas fa-rotate"></i></button>
-            <button class="icon-btn logout-btn" id="logout-btn" title="خروج"><i class="fas fa-sign-out-alt"></i></button>
+            <button class="icon-btn" id="refresh-btn" title="تحديث" aria-label="تحديث"><i class="fas fa-rotate"></i></button>
+            <button class="icon-btn logout-btn" id="logout-btn" title="خروج" aria-label="خروج"><i class="fas fa-sign-out-alt"></i></button>
         </div>
     </div>
 </header>
@@ -42,19 +70,19 @@
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-icon" style="background:linear-gradient(135deg,#60A5FA,#3B82F6)"><i class="fas fa-building"></i></div>
+                <div class="stat-icon tone-blue"><i class="fas fa-building"></i></div>
                 <div class="stat-info"><div class="stat-value" id="stat-properties">0</div><div class="stat-label">إجمالي العقارات</div></div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background:linear-gradient(135deg,#5EEAD4,#14B8A6)"><i class="fas fa-circle-check"></i></div>
+                <div class="stat-icon tone-green"><i class="fas fa-circle-check"></i></div>
                 <div class="stat-info"><div class="stat-value" id="stat-available">0</div><div class="stat-label">متاحة</div></div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background:linear-gradient(135deg,#F87171,#DC2626)"><i class="fas fa-check-double"></i></div>
+                <div class="stat-icon tone-red"><i class="fas fa-check-double"></i></div>
                 <div class="stat-info"><div class="stat-value" id="stat-sold">0</div><div class="stat-label">تم البيع</div></div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background:linear-gradient(135deg,#C4B5FD,#8B5CF6)"><i class="fas fa-key"></i></div>
+                <div class="stat-icon tone-violet"><i class="fas fa-key"></i></div>
                 <div class="stat-info"><div class="stat-value" id="stat-rented">0</div><div class="stat-label">تم التأجير</div></div>
             </div>
         </div>
@@ -63,11 +91,11 @@
             <h2 class="subsection-title">إجراءات سريعة</h2>
             <div class="quick-actions-grid">
                 <button class="quick-action-btn" data-action="add-property">
-                    <div class="qa-icon" style="background:linear-gradient(135deg,#60A5FA,#3B82F6)"><i class="fas fa-plus"></i></div>
+                    <div class="qa-icon qa-primary"><i class="fas fa-plus"></i></div>
                     <span>عقار جديد</span>
                 </button>
                 <button class="quick-action-btn" data-action="view-properties">
-                    <div class="qa-icon" style="background:linear-gradient(135deg,#C4B5FD,#8B5CF6)"><i class="fas fa-list"></i></div>
+                    <div class="qa-icon qa-soft"><i class="fas fa-list"></i></div>
                     <span>كل العقارات</span>
                 </button>
             </div>
@@ -88,7 +116,7 @@
         <!-- ⭐ شريط التصنيفات -->
         <div class="category-filter-bar">
             <div class="category-chips" id="category-chips"></div>
-            <button class="btn-add-category" id="add-category-btn" title="إضافة تصنيف">
+            <button class="btn-add-category" id="add-category-btn" title="إضافة تصنيف" aria-label="إضافة تصنيف">
                 <i class="fas fa-plus"></i>
             </button>
         </div>
@@ -102,7 +130,25 @@
             </div>
         </div>
 
-        <div class="properties-grid" id="properties-grid"></div>
+        <!-- هياكل التحميل: تُستبدل ببطاقات العقارات عند وصول البيانات وتختفي تلقائياً بالـ CSS -->
+        <div class="properties-grid" id="properties-grid">
+            <div class="sk-card" aria-hidden="true">
+                <div class="skeleton sk-img"></div>
+                <div class="sk-body">
+                    <div class="skeleton sk-line w70"></div>
+                    <div class="skeleton sk-line w45"></div>
+                    <div class="skeleton sk-line w90"></div>
+                </div>
+            </div>
+            <div class="sk-card" aria-hidden="true">
+                <div class="skeleton sk-img"></div>
+                <div class="sk-body">
+                    <div class="skeleton sk-line w70"></div>
+                    <div class="skeleton sk-line w45"></div>
+                    <div class="skeleton sk-line w90"></div>
+                </div>
+            </div>
+        </div>
     </section>
 
     <section id="section-settings" class="app-section" data-section="settings">
@@ -141,7 +187,7 @@
     <div class="modal-content large">
         <div class="modal-header">
             <h3 id="property-modal-title">إضافة عقار جديد</h3>
-            <button class="close-modal" id="close-property-modal"><i class="fas fa-times"></i></button>
+            <button class="close-modal" id="close-property-modal" aria-label="إغلاق"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body">
             <form id="property-form" onsubmit="return false;">
@@ -209,7 +255,7 @@
                     <div class="media-grid" id="images-grid"></div>
                     <div class="media-add-row">
                         <input type="url" id="new-image-url" placeholder="الصق رابط صورة (https://...)" dir="ltr">
-                        <button type="button" class="btn btn-primary" id="add-image-url-btn"><i class="fas fa-plus"></i></button>
+                        <button type="button" class="btn btn-primary" id="add-image-url-btn" aria-label="إضافة الصورة"><i class="fas fa-plus"></i></button>
                     </div>
                     <div class="media-upload-row">
                         <label class="btn btn-outline media-upload-btn" for="image-file-input">
@@ -226,7 +272,7 @@
                     <div class="media-grid" id="videos-grid"></div>
                     <div class="media-add-row">
                         <input type="url" id="new-video-url" placeholder="YouTube أو MP4" dir="ltr">
-                        <button type="button" class="btn btn-primary" id="add-video-url-btn"><i class="fas fa-plus"></i></button>
+                        <button type="button" class="btn btn-primary" id="add-video-url-btn" aria-label="إضافة الفيديو"><i class="fas fa-plus"></i></button>
                     </div>
                     <div class="media-upload-row">
                         <label class="btn btn-outline media-upload-btn" for="video-file-input">
@@ -243,7 +289,7 @@
                     <div class="amenities-grid" id="amenities-grid"></div>
                     <div class="amenity-add-row">
                         <input type="text" id="new-amenity-input" placeholder="أضف مرفقاً..." maxlength="30">
-                        <button type="button" class="btn btn-primary" id="add-amenity-btn"><i class="fas fa-plus"></i></button>
+                        <button type="button" class="btn btn-primary" id="add-amenity-btn" aria-label="إضافة المرفق"><i class="fas fa-plus"></i></button>
                     </div>
                 </div>
             </form>
@@ -260,7 +306,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>إضافة تصنيف جديد</h3>
-            <button class="close-modal" id="close-category-modal"><i class="fas fa-times"></i></button>
+            <button class="close-modal" id="close-category-modal" aria-label="إغلاق"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -294,6 +340,30 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-client.js"></script>
 <script src="admin.js"></script>
+
+<!-- تموّج اللمس (تأثير بصري فقط، لا يمس منطق الأدمن) -->
+<script>
+(function () {
+    'use strict';
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    var SEL = '.btn,.icon-btn,.quick-action-btn,.nav-item,.category-chip,.btn-add-category,.property-action-btn,.close-modal,.amenity-item';
+
+    document.addEventListener('pointerdown', function (e) {
+        var el = e.target && e.target.closest ? e.target.closest(SEL) : null;
+        if (!el || el.disabled) return;
+
+        var r = el.getBoundingClientRect();
+        var size = Math.max(r.width, r.height) * 2.2;
+        var fx = document.createElement('ripple-fx');
+        fx.style.width = fx.style.height = size + 'px';
+        fx.style.left = (e.clientX - r.left - size / 2) + 'px';
+        fx.style.top = (e.clientY - r.top - size / 2) + 'px';
+        el.appendChild(fx);
+        fx.addEventListener('animationend', function () { fx.remove(); });
+    }, { passive: true });
+})();
+</script>
 
 </body>
 </html>
