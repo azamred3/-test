@@ -93,7 +93,7 @@
 
     function ytId(url) {
         if (!url) return null;
-        var m = String(url).match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/);
+        var m = String(url).match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/shorts\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/);
         return m ? m[1] : null;
     }
 
@@ -102,7 +102,17 @@
         if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
             if (Math.abs(lat - 24.7136) > 0.01 || Math.abs(lng - 46.6753) > 0.01) return lat + ',' + lng;
         }
-        if (p.location) return encodeURIComponent(p.location);
+        if (p.location && !isUrl(p.location)) return encodeURIComponent(p.location);
+        return null;
+    }
+    function isUrl(s) { return /^https?:\/\//i.test(String(s || '').trim()); }
+    // لو كان الموقع المحفوظ رابطاً (بيانات قديمة) نعرض عبارة نظيفة بدل الرابط الخام
+    function locText(p) { var l = String(p.location || '').trim(); return isUrl(l) ? 'الموقع على الخريطة' : l; }
+    // رابط فتح الخريطة: إحداثيات ← اسم المكان ← الرابط المحفوظ نفسه
+    function mapOpenUrl(p, dir) {
+        var q = mapQuery(p);
+        if (q) return dir ? mapsDir(q) : mapsLink(q);
+        if (isUrl(p.location)) return String(p.location).trim();
         return null;
     }
     function mapsEmbed(q) { return 'https://maps.google.com/maps?q=' + q + '&z=15&output=embed&hl=ar'; }
@@ -430,6 +440,7 @@
 
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return;
+            if (lbOpen) { closeLightbox(); return; }
             if (SHEETS.some(isOpen)) closeAllSheets(); else closePreview();
         });
 
@@ -443,7 +454,11 @@
         bindPreviewScroll();
         bindTilt();
 
-        window.addEventListener('popstate', function () { closePreview(true); });
+        window.addEventListener('popstate', function () {
+            if (lbOpen) { closeLightbox(true); return; }
+            if (lbSkipPop) { lbSkipPop = false; return; }
+            closePreview(true);
+        });
         document.addEventListener('click', onGlobalClick);
         document.addEventListener('click', function (e) {
             var b = e.target.closest && e.target.closest('[data-popup-open]');
@@ -484,8 +499,8 @@
             else if (a === 'compare') toggleCompare(id);
             else if (a === 'share') openShare(id);
             else if (a === 'inquiry') openInquiry(id);
-            else if (a === 'map') { var p = byId(id), q = p && mapQuery(p); if (q) window.open(mapsLink(q), '_blank'); else toast('لا يوجد موقع محدد لهذا العقار', 'error'); }
-            else if (a === 'directions') { var p2 = byId(id), q2 = p2 && mapQuery(p2); if (q2) window.open(mapsDir(q2), '_blank'); }
+            else if (a === 'map') { var p = byId(id), u = p && mapOpenUrl(p); if (u) window.open(u, '_blank'); else toast('لا يوجد موقع محدد لهذا العقار', 'error'); }
+            else if (a === 'directions') { var p2 = byId(id), u2 = p2 && mapOpenUrl(p2, true); if (u2) window.open(u2, '_blank'); }
             else if (a === 'cat') { state.filters.category = id; applyFilters(); }
             else if (a === 'reset') resetFilters();
             return;
@@ -598,7 +613,7 @@
         if (!matches.length) { box.classList.remove('show'); return; }
         box.innerHTML = matches.map(function (p) {
             return '<button class="suggestion-item" data-suggest="' + esc(p.id) + '"><i class="ph ph-house-line"></i>' +
-                '<div class="suggestion-text"><b>' + esc(p.title) + '</b><small>' + esc(p.location) + '</small></div></button>';
+                '<div class="suggestion-text"><b>' + esc(p.title) + '</b><small>' + esc(locText(p)) + '</small></div></button>';
         }).join('');
         box.classList.add('show');
         box.querySelectorAll('[data-suggest]').forEach(function (b) {
@@ -806,7 +821,7 @@
                 '<span class="chip-glass glass">' + esc(p.category) + '</span></div>' +
                 '<div class="feat-info"><div class="feat-price">' + esc(p.price) + '</div>' +
                 '<div class="feat-title">' + esc(p.title) + '</div>' +
-                '<div class="feat-loc"><i class="ph ph-map-pin"></i><span>' + esc(p.location) + '</span></div></div>' +
+                '<div class="feat-loc"><i class="ph ph-map-pin"></i><span>' + esc(locText(p)) + '</span></div></div>' +
             '</article></div>';
         }).join('');
 
@@ -886,7 +901,7 @@
             '</div>' +
             '<div class="p-body">' +
                 '<h3 class="p-title">' + esc(p.title) + '</h3>' +
-                '<div class="p-loc"><i class="ph ph-map-pin"></i><span>' + esc(p.location) + '</span></div>' +
+                '<div class="p-loc"><i class="ph ph-map-pin"></i><span>' + esc(locText(p)) + '</span></div>' +
                 (tags.length ? '<div class="p-meta">' + tags.join('') + '</div>' : '') +
                 '<div class="p-footer">' +
                     '<span class="deal-badge ' + (p.category === 'للإيجار' ? 'for-rent' : 'for-sale') + '">' + esc(p.category) + '</span>' +
@@ -1007,7 +1022,7 @@
             ['التصنيف', function (p) { return esc(p.type); }],
             ['العملية', function (p) { return esc(p.category); }],
             ['المساحة', function (p) { return p.area + ' م²'; }],
-            ['الموقع', function (p) { return esc(p.location); }],
+            ['الموقع', function (p) { return esc(locText(p)); }],
             ['الحالة', function (p) { return (STATUS_LABELS[p.status] || STATUS_LABELS.available).label; }],
             ['المرافق', function (p) { return (p.features || []).map(function (f) { return '<span class="compare-amenity">' + esc(amenityLabel(f)) + '</span>'; }).join('') || '—'; }]
         ];
@@ -1040,6 +1055,156 @@
         $('preview-compare-btn').classList.toggle('active-compare', state.compare.indexOf(String(id)) !== -1);
     }
 
+    /* ============================================================
+       معرض التفاصيل: صور / فيديوهات + العرض بملء الشاشة
+       ============================================================ */
+    var lbOpen = false, lbPushed = false, lbSkipPop = false;
+
+    function buildGallery(p) {
+        var imgs = p.images || [], vids = p.videos || [];
+        var hasVids = vids.length > 0;
+
+        var tabs = hasVids
+            ? '<div class="media-tabs glass" role="tablist">' +
+                '<button type="button" class="media-tab active" role="tab" data-mtab="images"><i class="ph ph-images"></i><span>صور</span><b>' + imgs.length + '</b></button>' +
+                '<button type="button" class="media-tab" role="tab" data-mtab="videos"><i class="ph ph-play-circle"></i><span>فيديوهات</span><b>' + vids.length + '</b></button>' +
+              '</div>' : '';
+
+        var videoPane = hasVids
+            ? '<div class="gal-pane gal-videos' + (vids.length > 1 ? ' multi' : '') + '" id="pane-videos"><div class="swiper" id="video-swiper"><div class="swiper-wrapper">' +
+                vids.map(function (u) {
+                    var y = ytId(u);
+                    var media = y
+                        ? '<iframe data-src="https://www.youtube.com/embed/' + y + '?rel=0&playsinline=1&enablejsapi=1" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title="فيديو العقار"></iframe>'
+                        : '<video data-src="' + esc(u) + '" controls preload="none" playsinline></video>';
+                    return '<div class="swiper-slide"><div class="video-frame swiper-no-swiping">' + media + '</div></div>';
+                }).join('') +
+              '</div>' + (vids.length > 1 ? '<div class="swiper-pagination"></div>' : '') + '</div></div>' : '';
+
+        return '<div class="gallery" id="gallery">' +
+            '<div class="gal-pane gal-images active" id="pane-images"><div class="swiper" id="gallery-swiper"><div class="swiper-wrapper">' +
+                imgs.map(function (im) { return '<div class="swiper-slide"><img src="' + esc(im) + '" alt="" loading="lazy"></div>'; }).join('') +
+            '</div>' + (imgs.length > 1 ? '<div class="swiper-pagination"></div>' : '') + '</div></div>' +
+            videoPane + tabs +
+            (imgs.length > 1 ? '<span class="gallery-counter glass" id="gallery-counter">1 / ' + imgs.length + '</span>' : '') +
+            '<button type="button" class="gal-expand glass" id="gal-expand" aria-label="عرض الصور بملء الشاشة"><i class="ph ph-arrows-out-simple"></i></button>' +
+        '</div>';
+    }
+
+    function initGallery(p) {
+        ['gallerySwiper', 'videoSwiper'].forEach(function (k) { if (state[k]) { try { state[k].destroy(true, true); } catch (e) {} state[k] = null; } });
+        var imgs = p.images || [];
+
+        if (typeof Swiper !== 'undefined') {
+            state.gallerySwiper = new Swiper('#gallery-swiper', {
+                grabCursor: true, speed: 500,
+                pagination: imgs.length > 1 ? { el: '#gallery-swiper .swiper-pagination', clickable: true } : false,
+                on: {
+                    slideChange: function (s) { var c = $('gallery-counter'); if (c) c.textContent = (s.activeIndex + 1) + ' / ' + imgs.length; },
+                    click: function (s) { openLightbox(typeof s.clickedIndex === 'number' ? s.clickedIndex : s.activeIndex, imgs); }
+                }
+            });
+            if ($('video-swiper')) {
+                var n = (p.videos || []).length;
+                state.videoSwiper = new Swiper('#video-swiper', {
+                    speed: 400,
+                    pagination: n > 1 ? {
+                        el: '#video-swiper .swiper-pagination', clickable: true,
+                        renderBullet: function (i, cls) { return '<button type="button" class="' + cls + ' vbullet">' + (i + 1) + '</button>'; }
+                    } : false,
+                    on: { slideChange: function () { pauseVideos(false); } }
+                });
+            }
+        }
+
+        document.querySelectorAll('.media-tab').forEach(function (b) { b.onclick = function () { setMediaMode(b.dataset.mtab); }; });
+        var ex = $('gal-expand');
+        if (ex) ex.onclick = function () { openLightbox(state.gallerySwiper ? state.gallerySwiper.activeIndex : 0, imgs); };
+    }
+
+    function setMediaMode(mode) {
+        var g = $('gallery');
+        if (!g) return;
+        var vid = mode === 'videos';
+        g.classList.toggle('mode-videos', vid);
+        $('pane-images').classList.toggle('active', !vid);
+        var pv = $('pane-videos');
+        if (pv) pv.classList.toggle('active', vid);
+        document.querySelectorAll('.media-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.mtab === mode); });
+        if (vid) {
+            document.querySelectorAll('#pane-videos [data-src]').forEach(function (el) { if (!el.getAttribute('src')) el.setAttribute('src', el.dataset.src); });
+            if (state.videoSwiper) state.videoSwiper.update();
+        } else {
+            pauseVideos(true);
+        }
+    }
+
+    // hard=true: يوقف التشغيل ويفرغ مشغّل يوتيوب تماماً، وإلا يكتفي بالإيقاف المؤقت
+    function pauseVideos(hard) {
+        document.querySelectorAll('#pane-videos iframe').forEach(function (f) {
+            if (hard) { f.removeAttribute('src'); return; }
+            try { f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'); } catch (e) {}
+        });
+        document.querySelectorAll('#pane-videos video').forEach(function (v) { try { v.pause(); } catch (e) {} });
+    }
+
+    function ensureLightbox() {
+        var lb = $('lightbox');
+        if (lb) return lb;
+        lb = document.createElement('div');
+        lb.id = 'lightbox';
+        lb.className = 'lightbox';
+        lb.setAttribute('role', 'dialog');
+        lb.setAttribute('aria-modal', 'true');
+        lb.setAttribute('aria-label', 'معرض الصور');
+        lb.innerHTML =
+            '<div class="lb-top"><span class="lb-count" id="lb-count"></span>' +
+            '<button type="button" class="round-btn" id="lb-close" aria-label="إغلاق"><i class="ph-bold ph-x"></i></button></div>' +
+            '<div class="swiper" id="lb-swiper"><div class="swiper-wrapper" id="lb-wrapper"></div></div>' +
+            '<button type="button" class="round-btn lb-nav lb-prev" id="lb-prev" aria-label="السابق"><i class="ph-bold ph-caret-right"></i></button>' +
+            '<button type="button" class="round-btn lb-nav lb-next" id="lb-next" aria-label="التالي"><i class="ph-bold ph-caret-left"></i></button>';
+        document.body.appendChild(lb);
+        $('lb-close').onclick = function () { closeLightbox(); };
+        return lb;
+    }
+
+    function openLightbox(index, images) {
+        if (typeof Swiper === 'undefined' || !images || !images.length) return;
+        var lb = ensureLightbox();
+        if (state.lbSwiper) { try { state.lbSwiper.destroy(true, true); } catch (e) {} state.lbSwiper = null; }
+        $('lb-wrapper').innerHTML = images.map(function (im) {
+            return '<div class="swiper-slide"><div class="swiper-zoom-container"><img src="' + esc(im) + '" alt=""></div></div>';
+        }).join('');
+        var multi = images.length > 1;
+        lb.classList.toggle('single', !multi);
+        $('lb-count').textContent = multi ? (index + 1) + ' / ' + images.length : '';
+        state.lbSwiper = new Swiper('#lb-swiper', {
+            initialSlide: index, speed: 350, spaceBetween: 20,
+            zoom: { maxRatio: 3 }, keyboard: { enabled: true },
+            navigation: { nextEl: '#lb-next', prevEl: '#lb-prev' },
+            on: { slideChange: function (s) { if (multi) $('lb-count').textContent = (s.activeIndex + 1) + ' / ' + images.length; } }
+        });
+        lb.classList.add('open');
+        lbOpen = true;
+        if (!lbPushed) { try { history.pushState({ lightbox: 1 }, ''); lbPushed = true; } catch (e) {} }
+    }
+
+    function closeLightbox(fromPop) {
+        if (!lbOpen) return;
+        lbOpen = false;
+        var lb = $('lightbox');
+        if (lb) lb.classList.remove('open');
+        var sw = state.lbSwiper;
+        state.lbSwiper = null;
+        setTimeout(function () {
+            if (sw) { try { sw.destroy(true, true); } catch (e) {} }
+            var w = $('lb-wrapper');
+            if (w && !lbOpen) w.innerHTML = '';
+        }, 350);
+        if (!fromPop && lbPushed) { lbPushed = false; lbSkipPop = true; try { history.back(); } catch (e) { lbSkipPop = false; } }
+        else lbPushed = false;
+    }
+
     function openPreview(id) {
         var p = byId(id);
         if (!p) return;
@@ -1054,37 +1219,26 @@
               p.features.map(function (f) { return '<div class="amen"><i class="ph ' + amenityIcon(f) + '"></i><span>' + esc(amenityLabel(f)) + '</span></div>'; }).join('') +
               '</div></section>' : '';
 
-        var mapHtml = q
+        var mapHtml = mapOpenUrl(p)
             ? '<section class="d-section"><h3><i class="ph-fill ph-map-pin"></i> موقع العقار</h3>' +
-              '<div class="map-box"><iframe src="' + mapsEmbed(q) + '" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe></div>' +
-              '<div class="map-actions"><button class="btn btn-primary" data-act="map" data-id="' + esc(p.id) + '"><i class="ph ph-map-trifold"></i> افتح الخريطة</button>' +
-              '<button class="btn btn-outline" data-act="directions" data-id="' + esc(p.id) + '"><i class="ph ph-navigation-arrow"></i> الاتجاهات</button></div></section>' : '';
-
-        var vids = (p.videos && p.videos.length)
-            ? '<section class="d-section"><h3><i class="ph-fill ph-play-circle"></i> فيديوهات العقار</h3><div class="videos">' +
-              p.videos.map(function (u) {
-                  var y = ytId(u);
-                  return y ? '<div class="video-box"><iframe src="https://www.youtube.com/embed/' + y + '" allowfullscreen loading="lazy"></iframe></div>'
-                           : '<div class="video-box"><video src="' + esc(u) + '" controls preload="metadata" playsinline></video></div>';
-              }).join('') + '</div></section>' : '';
+              (q ? '<div class="map-box"><iframe src="' + mapsEmbed(q) + '" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe></div>' : '') +
+              '<div class="map-actions"' + (q ? '' : ' style="grid-template-columns:1fr"') + '><button class="btn btn-primary" data-act="map" data-id="' + esc(p.id) + '"><i class="ph ph-map-trifold"></i> افتح الخريطة</button>' +
+              (q ? '<button class="btn btn-outline" data-act="directions" data-id="' + esc(p.id) + '"><i class="ph ph-navigation-arrow"></i> الاتجاهات</button>' : '') + '</div></section>' : '';
 
         var html =
-            '<div class="gallery"><div class="swiper" id="gallery-swiper"><div class="swiper-wrapper">' +
-                p.images.map(function (im) { return '<div class="swiper-slide"><img src="' + esc(im) + '" alt="" loading="lazy"></div>'; }).join('') +
-            '</div>' + (p.images.length > 1 ? '<div class="swiper-pagination"></div>' : '') + '</div>' +
-            (p.images.length > 1 ? '<span class="gallery-counter glass" id="gallery-counter">1 / ' + p.images.length + '</span>' : '') + '</div>' +
+            buildGallery(p) +
             '<div class="details">' +
                 (closed ? '<div class="d-status status-' + p.status + '">' + STATUS_LABELS[p.status].label + '</div>' : '') +
                 '<div class="d-price">' + esc(p.price) + '</div>' +
                 '<h2 class="d-title">' + esc(p.title) + '</h2>' +
-                '<div class="d-loc"><i class="ph ph-map-pin"></i>' + esc(p.location) + '</div>' +
+                '<div class="d-loc"><i class="ph ph-map-pin"></i>' + esc(locText(p)) + '</div>' +
                 '<div class="d-stats">' +
                     '<div class="d-stat"><i class="ph ph-tag"></i><b>' + esc(p.type || '—') + '</b><small>التصنيف</small></div>' +
                     '<div class="d-stat"><i class="ph ph-ruler"></i><b>' + (p.area ? p.area + ' م²' : '—') + '</b><small>المساحة</small></div>' +
                     '<div class="d-stat"><i class="ph ph-key"></i><b>' + esc(p.category || '—') + '</b><small>العملية</small></div>' +
                 '</div>' +
                 (p.description ? '<section class="d-section"><h3><i class="ph-fill ph-article"></i> الوصف</h3><p class="d-desc">' + esc(p.description) + '</p></section>' : '') +
-                amen + mapHtml + vids +
+                amen + mapHtml +
                 '<p class="d-desc" style="text-align:center;font-size:12px;opacity:.7">رمز العقار: ' + esc(p.code) + (p.views ? ' · ' + p.views + ' مشاهدة' : '') + '</p>' +
             '</div>';
 
@@ -1102,14 +1256,7 @@
         $('preview-compare-btn').onclick = function () { toggleCompare(p.id); };
         $('preview-share-btn').onclick = function () { openShare(p.id); };
 
-        if (state.gallerySwiper) { try { state.gallerySwiper.destroy(true, true); } catch (e) {} state.gallerySwiper = null; }
-        if (typeof Swiper !== 'undefined') {
-            state.gallerySwiper = new Swiper('#gallery-swiper', {
-                grabCursor: true, speed: 500,
-                pagination: p.images.length > 1 ? { el: '.gallery .swiper-pagination', clickable: true } : false,
-                on: { slideChange: function (s) { var c = $('gallery-counter'); if (c) c.textContent = (s.activeIndex + 1) + ' / ' + p.images.length; } }
-            });
-        }
+        initGallery(p);
 
         // دائرة تتسع من نقطة اللمس
         var o = $('preview-overlay');
@@ -1132,7 +1279,9 @@
         var o = $('preview-overlay');
         if (!o.classList.contains('open')) return;
         o.classList.remove('open');
-        if (state.gallerySwiper) { try { state.gallerySwiper.destroy(true, true); } catch (e) {} state.gallerySwiper = null; }
+        closeLightbox(true);
+        pauseVideos(true);
+        ['gallerySwiper', 'videoSwiper'].forEach(function (k) { if (state[k]) { try { state[k].destroy(true, true); } catch (e) {} state[k] = null; } });
         setTimeout(function () { var c = document.querySelector('.preview-content'); if (c && !o.classList.contains('open')) c.innerHTML = ''; }, 700);
         currentPreviewId = null;
         if (!fromPop && previewPushed) { previewPushed = false; try { history.back(); } catch (e) {} }
