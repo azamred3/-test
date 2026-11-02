@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="admin.css">
 </head>
 <body>
@@ -240,8 +241,27 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="property-location">الموقع *</label>
-                    <input type="text" id="property-location" placeholder="أدخل العنوان" required>
+                    <label for="property-location">الحي / المدينة *</label>
+                    <input type="text" id="property-location" placeholder="مثال: حي النرجس، الرياض" required>
+                </div>
+
+                <!-- موقع العقار على الخريطة -->
+                <div class="form-group">
+                    <label><i class="fas fa-location-dot"></i> موقع العقار على الخريطة <small id="geo-badge">(غير محدد)</small></label>
+                    <div class="media-add-row">
+                        <input type="text" id="geo-paste" dir="ltr" placeholder="الصق الإحداثيات أو رابط قوقل ماب الطويل" autocomplete="off">
+                        <button type="button" class="btn btn-primary" id="geo-apply" aria-label="تحديد من النص"><i class="fas fa-check"></i></button>
+                    </div>
+                    <div class="media-add-row">
+                        <input type="text" id="geo-search" placeholder="ابحث عن حي أو مكان على الخريطة..." autocomplete="off">
+                        <button type="button" class="btn btn-primary" id="geo-search-btn" aria-label="بحث"><i class="fas fa-search"></i></button>
+                    </div>
+                    <div class="geo-map" id="geo-map"></div>
+                    <div class="geo-actions">
+                        <button type="button" class="btn btn-outline" id="geo-locate"><i class="fas fa-crosshairs"></i><span>موقعي الحالي</span></button>
+                        <button type="button" class="btn btn-outline" id="geo-clear"><i class="fas fa-xmark"></i><span>إزالة الموقع</span></button>
+                    </div>
+                    <p class="geo-hint" id="geo-hint">اضغط على الخريطة لتحديد موقع العقار، أو استخدم الخيارات أعلاه.</p>
                 </div>
 
                 <div class="form-group">
@@ -249,37 +269,41 @@
                     <textarea id="property-description" placeholder="وصف العقار" rows="3"></textarea>
                 </div>
 
-                <!-- الصور -->
+                <!-- الوسائط: صور / فيديوهات -->
                 <div class="form-group">
-                    <label><i class="fas fa-images"></i> صور العقار <small id="images-count-badge">(0)</small></label>
-                    <div class="media-grid" id="images-grid"></div>
-                    <div class="media-add-row">
-                        <input type="url" id="new-image-url" placeholder="الصق رابط صورة (https://...)" dir="ltr">
-                        <button type="button" class="btn btn-primary" id="add-image-url-btn" aria-label="إضافة الصورة"><i class="fas fa-plus"></i></button>
+                    <div class="amt-tabs" role="tablist">
+                        <button type="button" class="amt-tab active" role="tab" data-mt="images"><i class="fas fa-images"></i><span>الصور</span><small id="images-count-badge">(0)</small></button>
+                        <button type="button" class="amt-tab" role="tab" data-mt="videos"><i class="fas fa-video"></i><span>الفيديوهات</span><small id="videos-count-badge">(0)</small></button>
                     </div>
-                    <div class="media-upload-row">
-                        <label class="btn btn-outline media-upload-btn" for="image-file-input">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                            <span id="image-upload-label">رفع صور من الجهاز</span>
-                        </label>
-                        <input type="file" id="image-file-input" accept="image/*" multiple style="display:none">
-                    </div>
-                </div>
 
-                <!-- الفيديوهات -->
-                <div class="form-group">
-                    <label><i class="fas fa-video"></i> فيديوهات العقار <small id="videos-count-badge">(0)</small></label>
-                    <div class="media-grid" id="videos-grid"></div>
-                    <div class="media-add-row">
-                        <input type="url" id="new-video-url" placeholder="YouTube أو MP4" dir="ltr">
-                        <button type="button" class="btn btn-primary" id="add-video-url-btn" aria-label="إضافة الفيديو"><i class="fas fa-plus"></i></button>
+                    <div class="amt-pane active" id="amt-images">
+                        <div class="media-grid" id="images-grid"></div>
+                        <div class="media-add-row">
+                            <input type="url" id="new-image-url" placeholder="الصق رابط صورة (https://...)" dir="ltr">
+                            <button type="button" class="btn btn-primary" id="add-image-url-btn" aria-label="إضافة الصورة"><i class="fas fa-plus"></i></button>
+                        </div>
+                        <div class="media-upload-row">
+                            <label class="btn btn-outline media-upload-btn" for="image-file-input">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <span id="image-upload-label">رفع صور من الجهاز</span>
+                            </label>
+                            <input type="file" id="image-file-input" accept="image/*" multiple style="display:none">
+                        </div>
                     </div>
-                    <div class="media-upload-row">
-                        <label class="btn btn-outline media-upload-btn" for="video-file-input">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                            <span id="video-upload-label">رفع فيديو من الجهاز</span>
-                        </label>
-                        <input type="file" id="video-file-input" accept="video/*" multiple style="display:none">
+
+                    <div class="amt-pane" id="amt-videos">
+                        <div class="media-grid" id="videos-grid"></div>
+                        <div class="media-add-row">
+                            <input type="url" id="new-video-url" placeholder="رابط YouTube أو MP4" dir="ltr">
+                            <button type="button" class="btn btn-primary" id="add-video-url-btn" aria-label="إضافة الفيديو"><i class="fas fa-plus"></i></button>
+                        </div>
+                        <div class="media-upload-row">
+                            <label class="btn btn-outline media-upload-btn" for="video-file-input">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <span id="video-upload-label">رفع فيديو من الجهاز</span>
+                            </label>
+                            <input type="file" id="video-file-input" accept="video/*" multiple style="display:none">
+                        </div>
                     </div>
                 </div>
 
@@ -337,6 +361,7 @@
 
 <div class="alert-container" id="alert-container"></div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-client.js"></script>
 <script src="admin.js"></script>
