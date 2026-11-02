@@ -10,6 +10,8 @@
     // اسم حاوية Storage في Supabase لرفع الصور/الفيديوهات من الجهاز (يجب أن تكون Public)
     var STORAGE_BUCKET = 'property-media';
     var MAX_UPLOAD_MB = 50;
+    // رمز الدولة للبحث عن الأماكن (sa = السعودية). اتركه فارغاً '' للبحث في كل الدول
+    var GEO_COUNTRY = 'sa';
 
     // نفس مفاتيح المرافق المستخدمة في الموقع الرئيسي (script.js)
     var DEFAULT_AMENITIES = [
@@ -44,6 +46,8 @@
         images: [],
         videos: [],
         features: [],
+        lat: null,
+        lng: null,
         saving: false
     };
 
@@ -70,7 +74,7 @@
             el.style.opacity = '0';
             el.style.transform = 'translateY(-12px)';
             setTimeout(function () { el.remove(); }, 320);
-        }, type === 'error' ? 5000 : 2800);
+        }, (type === 'error' || type === 'warning') ? 6000 : 2800);
     }
 
     function errText(err) {
@@ -234,7 +238,7 @@
                             '<h3 class="property-title">' + esc(p.title) + '</h3>' +
                             '<span class="property-price">' + esc(formatPrice(p.price)) + '</span>' +
                         '</div>' +
-                        '<div class="property-location"><i class="fas fa-location-dot"></i><span>' + esc(p.location || '—') + '</span></div>' +
+                        '<div class="property-location"><i class="fas fa-location-dot"></i><span>' + esc(isHttpUrl(String(p.location || '').trim()) ? 'رابط خريطة — عدّل الموقع' : (p.location || '—')) + '</span></div>' +
                         '<div class="property-footer">' +
                             '<span class="status-badge ' + deal + '">' + esc(p.category || '—') + '</span>' +
                             '<div class="property-actions">' +
@@ -292,6 +296,152 @@
     }
 
     /* ============================================================
+       موقع العقار على الخريطة
+       ============================================================ */
+    var geo = { map: null, marker: null };
+    var DEFAULT_CENTER = [24.7136, 46.6753];
+
+    function toLatin(s) {
+        return String(s).replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }).replace(/٫/g, '.').replace(/[،؛]/g, ',');
+    }
+    function validCoords(a, b) {
+        return isFinite(a) && isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180 && !(a === 0 && b === 0);
+    }
+    function isShortMapLink(t) { return /maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs/i.test(t); }
+
+    // يقرأ الإحداثيات من: 24.71, 46.67 | رابط قوقل الطويل (@lat,lng أو !3d..!4d.. أو ?q=lat,lng)
+    function parseCoords(text) {
+        var t = toLatin(String(text || '').trim());
+        try { t = decodeURIComponent(t); } catch (e) {}
+        var m = t.match(/@(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)/)
+             || t.match(/!3d(-?\d{1,2}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/)
+             || t.match(/[?&](?:q|ll|query|center|destination|daddr)=(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/i)
+             || t.match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+        if (!m) return null;
+        var a = parseFloat(m[1]), b = parseFloat(m[2]);
+        return validCoords(a, b) ? { lat: a, lng: b } : null;
+    }
+
+    function pinIcon() {
+        return L.divIcon({ className: 'geo-pin', html: '<i class="fas fa-location-dot"></i>', iconSize: [36, 36], iconAnchor: [18, 34] });
+    }
+
+    function initGeoMap() {
+        if (geo.map || typeof L === 'undefined') return;
+        geo.map = L.map('geo-map').setView(DEFAULT_CENTER, 6);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19, subdomains: 'abcd', attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(geo.map);
+        geo.map.on('click', function (e) { setGeo(e.latlng.lat, e.latlng.lng, false); });
+    }
+
+    function updateGeoUI() {
+        var has = state.lat != null && state.lng != null;
+        $('geo-badge').textContent = has ? '(تم التحديد)' : '(غير محدد)';
+        $('geo-hint').textContent = has
+            ? 'الإحداثيات: ' + state.lat + '، ' + state.lng + ' — اسحب الدبوس لتعديل الموقع.'
+            : 'اضغط على الخريطة لتحديد موقع العقار، أو استخدم الخيارات أعلاه.';
+        $('geo-clear').disabled = !has;
+    }
+
+    // move=true: تقرّب الخريطة للنقطة
+    function setGeo(lat, lng, move) {
+        lat = Math.round(lat * 1e6) / 1e6;
+        lng = Math.round(lng * 1e6) / 1e6;
+        state.lat = lat;
+        state.lng = lng;
+        if (geo.map) {
+            if (!geo.marker) {
+                geo.marker = L.marker([lat, lng], { draggable: true, icon: pinIcon() }).addTo(geo.map);
+                geo.marker.on('dragend', function () {
+                    var ll = geo.marker.getLatLng();
+                    setGeo(ll.lat, ll.lng, false);
+                });
+            } else {
+                geo.marker.setLatLng([lat, lng]);
+            }
+            if (move) geo.map.setView([lat, lng], Math.max(geo.map.getZoom(), 16));
+        }
+        updateGeoUI();
+    }
+
+    function clearGeo() {
+        state.lat = null;
+        state.lng = null;
+        if (geo.marker && geo.map) geo.map.removeLayer(geo.marker);
+        geo.marker = null;
+        updateGeoUI();
+    }
+
+    // تُستدعى بعد ظهور النافذة (Leaflet يحتاج حجماً فعلياً للحاوية)
+    function syncGeoMap() {
+        initGeoMap();
+        if (!geo.map) { showAlert('تعذّر تحميل الخريطة — تأكد من اتصال الإنترنت', 'warning'); return; }
+        geo.map.invalidateSize();
+        if (state.lat != null) setGeo(state.lat, state.lng, true);
+        else geo.map.setView(DEFAULT_CENTER, 6);
+    }
+
+    function applyGeoPaste() {
+        var v = $('geo-paste').value.trim();
+        if (!v) return;
+        var c = parseCoords(v);
+        if (c) {
+            setGeo(c.lat, c.lng, true);
+            $('geo-paste').value = '';
+            showAlert('تم تحديد الموقع على الخريطة', 'success');
+        } else if (isShortMapLink(v)) {
+            showAlert('الرابط المختصر ما يقدر المتصفح يقرأ موقعه. في قوقل ماب اضغط مطولاً على المكان وانسخ الإحداثيات، أو حدد المكان مباشرة على الخريطة هنا.', 'warning');
+        } else {
+            showAlert('ما قدرت أستخرج الموقع. الصق إحداثيات مثل 24.7136, 46.6753 أو رابطاً طويلاً من قوقل ماب.', 'warning');
+        }
+    }
+
+    function locateMe() {
+        if (!navigator.geolocation) { showAlert('المتصفح لا يدعم تحديد الموقع', 'warning'); return; }
+        var btn = $('geo-locate');
+        btn.disabled = true;
+        navigator.geolocation.getCurrentPosition(function (pos) {
+            btn.disabled = false;
+            setGeo(pos.coords.latitude, pos.coords.longitude, true);
+        }, function (err) {
+            btn.disabled = false;
+            showAlert(err && err.code === 1 ? 'اسمح للمتصفح بالوصول إلى موقعك ثم أعد المحاولة' : 'تعذّر تحديد موقعك الحالي', 'warning');
+        }, { enableHighAccuracy: true, timeout: 12000 });
+    }
+
+    async function searchPlace() {
+        var q = $('geo-search').value.trim();
+        if (!q) return;
+        initGeoMap();
+        if (!geo.map) return;
+        var btn = $('geo-search-btn');
+        btn.disabled = true;
+        try {
+            var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ar' +
+                      (GEO_COUNTRY ? '&countrycodes=' + GEO_COUNTRY : '') + '&q=' + encodeURIComponent(q);
+            var r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var list = await r.json();
+            if (!list.length) { showAlert('ما لقيت هذا المكان، جرّب كتابة الحي مع المدينة', 'warning'); return; }
+            geo.map.invalidateSize();
+            geo.map.setView([parseFloat(list[0].lat), parseFloat(list[0].lon)], 15);
+            showAlert('اضغط على مكان العقار بالضبط لتثبيت الدبوس', 'info');
+        } catch (err) {
+            console.error(err);
+            showAlert('تعذّر البحث الآن، حدد المكان بالنقر على الخريطة', 'warning');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    /* ---------- تبويب الصور / الفيديوهات ---------- */
+    function setMediaTab(name) {
+        document.querySelectorAll('.amt-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.mt === name); });
+        document.querySelectorAll('.amt-pane').forEach(function (p) { p.classList.toggle('active', p.id === 'amt-' + name); });
+    }
+
+    /* ============================================================
        نافذة العقار
        ============================================================ */
     function resetPropertyForm() {
@@ -303,6 +453,10 @@
         state.images = [];
         state.videos = [];
         state.features = [];
+        $('geo-paste').value = '';
+        $('geo-search').value = '';
+        clearGeo();
+        setMediaTab('images');
         renderImages();
         renderVideos();
         renderAmenities();
@@ -315,6 +469,7 @@
         $('property-status').value = 'available';
         $('property-modal-title').textContent = 'إضافة عقار جديد';
         openModal('property-modal');
+        setTimeout(syncGeoMap, 320);
     }
 
     function openEditProperty(id) {
@@ -330,7 +485,20 @@
         $('property-status').value = p.status || 'available';
         $('property-price').value = p.price || '';
         $('property-area').value = p.area || '';
-        $('property-location').value = p.location || '';
+        var loc = String(p.location || '').trim();
+        var plat = parseFloat(p.latitude), plng = parseFloat(p.longitude);
+        if (validCoords(plat, plng)) { state.lat = plat; state.lng = plng; }
+        if (isHttpUrl(loc)) {
+            // بيانات قديمة: الموقع محفوظ كرابط → ننقله لخانة الخريطة ونطلب اسم الحي
+            $('property-location').value = '';
+            $('geo-paste').value = loc;
+            var fromUrl = parseCoords(loc);
+            if (fromUrl && state.lat == null) { state.lat = fromUrl.lat; state.lng = fromUrl.lng; }
+            showAlert('موقع هذا العقار محفوظ كرابط. اكتب اسم الحي في خانة «الحي / المدينة» وحدد مكانه على الخريطة.', 'info');
+        } else {
+            $('property-location').value = loc;
+        }
+        updateGeoUI();
         $('property-description').value = p.description || '';
         state.images = (p.images || []).slice();
         state.videos = (p.videos || []).slice();
@@ -340,11 +508,27 @@
         renderAmenities();
         $('property-modal-title').textContent = 'تعديل العقار';
         openModal('property-modal');
+        setTimeout(syncGeoMap, 320);
     }
 
     async function saveProperty() {
         if (state.saving) return;
         var form = $('property-form');
+
+        // خانة الحي للاسم فقط — لو لصق رابطاً نحوّله لقسم الخريطة بدل ما يظهر للزوار
+        var locVal = $('property-location').value.trim();
+        if (isHttpUrl(locVal)) {
+            var c0 = parseCoords(locVal);
+            if (c0) setGeo(c0.lat, c0.lng, true);
+            $('geo-paste').value = c0 ? '' : locVal;
+            $('property-location').value = '';
+            $('property-location').focus();
+            showAlert(c0
+                ? 'استخرجت الموقع من الرابط ✔ الحين اكتب اسم الحي (مثل: حي النرجس) ثم احفظ.'
+                : 'خانة الحي للاسم فقط (مثل: حي النرجس). الرابط نقلته لقسم الخريطة — حدد المكان بالإحداثيات أو بالنقر على الخريطة.', 'warning');
+            return;
+        }
+
         if (!form.reportValidity()) return;
 
         var row = {
@@ -356,6 +540,8 @@
             price: $('property-price').value.trim(),
             area: parseInt($('property-area').value, 10) || 0,
             location: $('property-location').value.trim(),
+            latitude: state.lat,
+            longitude: state.lng,
             description: $('property-description').value.trim(),
             images: state.images,
             videos: state.videos,
@@ -386,7 +572,9 @@
             await loadProperties();
         } catch (err) {
             console.error(err);
-            showAlert('تعذّر الحفظ: ' + errText(err), 'error');
+            var em = errText(err);
+            if (/latitude|longitude/i.test(em)) em += ' — أضف عمودي latitude و longitude لجدول properties من SQL Editor (راجع التعليمات)';
+            showAlert('تعذّر الحفظ: ' + em, 'error');
         } finally {
             state.saving = false;
             btn.disabled = false;
@@ -615,6 +803,19 @@
         $('save-property').addEventListener('click', saveProperty);
         $('cancel-property').addEventListener('click', function () { closeModal('property-modal'); });
         $('close-property-modal').addEventListener('click', function () { closeModal('property-modal'); });
+
+        // الموقع على الخريطة
+        $('geo-apply').addEventListener('click', applyGeoPaste);
+        $('geo-paste').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applyGeoPaste(); } });
+        $('geo-search-btn').addEventListener('click', searchPlace);
+        $('geo-search').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); searchPlace(); } });
+        $('geo-locate').addEventListener('click', locateMe);
+        $('geo-clear').addEventListener('click', clearGeo);
+
+        // تبويب الصور / الفيديوهات
+        document.querySelectorAll('.amt-tab').forEach(function (b) {
+            b.addEventListener('click', function () { setMediaTab(b.dataset.mt); });
+        });
 
         // الصور والفيديو
         $('add-image-url-btn').addEventListener('click', addImageUrl);
